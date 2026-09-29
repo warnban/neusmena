@@ -173,7 +173,10 @@ export function CheckInModal({
                 guestIsForeigner={effectiveForeigner}
                 form={form}
                 disabled={busy}
+                hotelId={booking.hotelId}
+                aiAvailable={Boolean(hotel?.aiEnabled)}
                 onBusyChange={setScanBusy}
+                onStored={() => refreshSilent()}
                 onApplied={async ({ form: next, suggestedIsForeigner }) => {
                   setForm(next);
                   setEffectiveForeigner(suggestedIsForeigner);

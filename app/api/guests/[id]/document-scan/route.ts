@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { GUEST_DOC_MAX_BYTES, storeGuestDocument } from "@/lib/guest-document-storage.server";
 import { recognizeDocumentFromScan } from "@/lib/document-scan.server";
-import { assertGuestDocumentScanAllowed } from "@/lib/ai-premium.server";
+import { assertGuestDocumentScanAllowed, assertHotelAiEnabled } from "@/lib/ai-premium.server";
 import { listFilledExtractFields } from "@/lib/document-scan-parse";
 import { apiErrorMessage } from "@/lib/api-error";
 import { fileServeUrl } from "@/lib/file-url";
@@ -36,21 +36,19 @@ export async function POST(
       return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
     }
 
-    const aiCheck = await assertGuestDocumentScanAllowed(session.seatId, guest.id);
-    if (!aiCheck.ok) {
-      return NextResponse.json({ error: aiCheck.error }, { status: aiCheck.status });
-    }
-
-    if (!process.env.AITUNNEL_API_KEY?.trim()) {
-      return NextResponse.json(
-        { error: "Распознавание не настроено: добавьте AITUNNEL_API_KEY в .env" },
-        { status: 503 }
-      );
-    }
-
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const docType = (formData.get("type") as string) || "passport";
+    const hotelId = String(formData.get("hotelId") ?? "").trim();
+
+    const aiCheck = hotelId
+      ? await assertHotelAiEnabled(session.seatId, hotelId)
+      : await assertGuestDocumentScanAllowed(session.seatId, guest.id);
+    const aiUnavailable: { error: string; status: number } | null = !aiCheck.ok
+      ? { error: aiCheck.error, status: aiCheck.status }
+      : !process.env.AITUNNEL_API_KEY?.trim()
+        ? { error: "Распознавание не настроено: добавьте AITUNNEL_API_KEY в .env", status: 503 }
+        : null;
 
     if (!file?.size) {
       return NextResponse.json({ error: "Выберите файл" }, { status: 400 });
@@ -84,6 +82,21 @@ export async function POST(
       );
     }
 
+    const storedDocument = {
+      id: document.id,
+      name: document.name,
+      filePath: fileServeUrl(document.filePath),
+      type: document.type,
+    };
+
+    // Без AI скан всё равно остаётся в профиле гостя — поля администратор заполнит вручную.
+    if (aiUnavailable) {
+      return NextResponse.json(
+        { error: aiUnavailable.error, document: storedDocument, partial: true, aiUnavailable: true },
+        { status: aiUnavailable.status }
+      );
+    }
+
     let extract;
     try {
       extract = await recognizeDocumentFromScan(buffer, mime, file.name);
@@ -91,12 +104,7 @@ export async function POST(
       return NextResponse.json(
         {
           error: apiErrorMessage(e, "Не удалось распознать документ"),
-          document: {
-            id: document.id,
-            name: document.name,
-            filePath: fileServeUrl(document.filePath),
-            type: document.type,
-          },
+          document: storedDocument,
           partial: true,
         },
         { status: 422 }
@@ -111,12 +119,7 @@ export async function POST(
       ok: true,
       extract,
       filledFields,
-      document: {
-        id: document.id,
-        name: document.name,
-        filePath: fileServeUrl(document.filePath),
-        type: document.type,
-      },
+      document: storedDocument,
       suggestedIsForeigner,
       isForeignerMismatch,
     });

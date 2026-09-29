@@ -12,7 +12,13 @@ type Props = {
   guestIsForeigner: boolean;
   form: GuestFormData;
   disabled?: boolean;
+  /** Отель, для которого проверяется AI Premium (при заселении — отель брони). */
+  hotelId?: string;
+  /** false — AI Premium выключен: кнопка только прикрепляет скан к профилю. */
+  aiAvailable?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  /** Скан сохранён в профиле гостя (в том числе без распознавания). */
+  onStored?: () => void | Promise<void>;
   onApplied: (payload: {
     form: GuestFormData;
     extract: DocumentScanExtract;
@@ -26,7 +32,10 @@ export function DocumentScanUpload({
   guestIsForeigner,
   form,
   disabled,
+  hotelId,
+  aiAvailable = true,
   onBusyChange,
+  onStored,
   onApplied,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +59,7 @@ export function DocumentScanUpload({
       const fd = new FormData();
       fd.append("file", file);
       fd.append("type", "passport");
+      if (hotelId) fd.append("hotelId", hotelId);
 
       const res = await fetch(`/api/guests/${guestId}/document-scan`, {
         method: "POST",
@@ -57,9 +67,9 @@ export function DocumentScanUpload({
       });
 
       const raw = await res.text();
-      let data: DocumentScanApiResponse & { error?: string; partial?: boolean };
+      let data: DocumentScanApiResponse & { error?: string; partial?: boolean; aiUnavailable?: boolean };
       try {
-        data = JSON.parse(raw) as DocumentScanApiResponse & { error?: string; partial?: boolean };
+        data = JSON.parse(raw) as DocumentScanApiResponse & { error?: string; partial?: boolean; aiUnavailable?: boolean };
       } catch {
         setStatus("error");
         if (res.status === 413) {
@@ -74,16 +84,24 @@ export function DocumentScanUpload({
         return;
       }
 
+      if (data.partial) await onStored?.();
+
       if (!res.ok) {
+        if (data.aiUnavailable && !aiAvailable) {
+          setStatus("ok");
+          setMessage(`Скан «${file.name}» прикреплён к профилю гостя. Заполните поля вручную.`);
+          return;
+        }
         setStatus(data.partial ? "warn" : "error");
         setMessage(
           data.partial
-            ? `${data.error ?? "Распознавание не удалось"}. Скан прикреплён к профилю.`
+            ? `${data.error ?? "Распознавание не удалось"}. Скан прикреплён к профилю — заполните поля вручную.`
             : data.error ?? `Ошибка сервера (${res.status})`
         );
         return;
       }
 
+      await onStored?.();
       const nextForm = applyDocumentScanToForm(form, data.extract);
       await onApplied({
         form: nextForm,
@@ -132,9 +150,11 @@ export function DocumentScanUpload({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-bold">Скан документа · AI</p>
+            <p className="text-[13px] font-bold">{aiAvailable ? "Скан документа · AI" : "Скан документа"}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Загрузите фото или PDF — AI определит гражданство, тип документа и заполнит форму №5. Скан сохранится в профиле.
+              {aiAvailable
+                ? "Загрузите фото или PDF — AI определит гражданство, тип документа и заполнит форму №5. Скан сохранится в профиле."
+                : "AI-распознавание не подключено для этого отеля (AI Premium). Скан сохранится в профиле гостя, поля заполните вручную."}
             </p>
           </div>
         </div>
@@ -146,7 +166,7 @@ export function DocumentScanUpload({
           onClick={(e) => e.stopPropagation()}
         >
           <Upload size={14} />
-          {busy ? "Распознавание…" : "Загрузить скан"}
+          {busy ? (aiAvailable ? "Распознавание…" : "Загрузка…") : aiAvailable ? "Загрузить скан" : "Прикрепить скан"}
           <input
             ref={inputRef}
             type="file"
@@ -166,7 +186,8 @@ export function DocumentScanUpload({
 
       {status !== "idle" && message && (
         <div
-          className={`flex items-start gap-2 text-[11px] rounded-lg px-2.5 py-2 ${
+          role={status === "error" ? "alert" : "status"}
+          className={`flex items-start gap-2 text-[12px] font-medium rounded-lg px-2.5 py-2 ${
             status === "ok"
               ? "bg-success/10 text-success"
               : status === "warn"

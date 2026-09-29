@@ -18,7 +18,7 @@ export function GuestEditModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const { refreshSilent } = useApp();
+  const { refreshSilent, hotels } = useApp();
   const [form, setForm] = useState<GuestFormData>(() => guestToForm(guest));
   const [effectiveForeigner, setEffectiveForeigner] = useState(guest.isForeigner);
   const [scanBusy, setScanBusy] = useState(false);
@@ -98,7 +98,9 @@ export function GuestEditModal({
             guestIsForeigner={effectiveForeigner}
             form={form}
             disabled={busy || scanBusy}
+            aiAvailable={hotels.some((h) => h.aiEnabled)}
             onBusyChange={setScanBusy}
+            onStored={() => refreshSilent()}
             onApplied={async ({ form: next, suggestedIsForeigner }) => {
               setForm(next);
               setEffectiveForeigner(suggestedIsForeigner);
