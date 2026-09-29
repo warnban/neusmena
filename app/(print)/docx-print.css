@@ -84,9 +84,40 @@ body {
   box-shadow: 0 4px 24px rgb(0 0 0 / 0.25);
 }
 
+/*
+ * Нулевые поля страницы: браузер не печатает свои колонтитулы (заголовок вкладки, дату, URL, номер листа).
+ * Поля документа задаёт сам Word-шаблон через padding секции; clone повторяет их на каждом листе.
+ */
+@page {
+  size: A4;
+  margin: 0;
+}
+
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  /* className в RENDER_OPTS docx-print-view: docx-guest-form → обёртка docx-guest-form-wrapper */
+  .docx-print-body .docx-guest-form-wrapper {
+    display: block !important;
+    padding: 0 !important;
+    background: none !important;
+  }
+
+  .docx-print-body .docx-guest-form-wrapper > section.docx-guest-form {
+    margin: 0 !important;
+    box-shadow: none !important;
+    min-height: 0 !important;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .docx-print-body .docx-guest-form-wrapper > section.docx-guest-form:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 
   html,
