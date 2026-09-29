@@ -4,6 +4,7 @@ import type { HkTaskCategory, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { fileServeUrl } from "@/lib/file-url";
 import { HK_CATEGORY_LABELS } from "@/lib/housekeeping";
+import { mskAddDays, mskDateKey, mskDayAfter, parseMskDateKey } from "@/lib/msk-time";
 
 export const LINEN_CATEGORIES: HkTaskCategory[] = ["checkout", "relocation", "scheduled"];
 
@@ -231,9 +232,18 @@ export async function buildLinenOverview(
     if (n > 0) byCategory[cat] = n;
   }
 
+  // deliveredAt — календарная дата (полночь UTC), а не момент времени: сравниваем по дням МСК,
+  // иначе сегодняшняя доставка с 00:00 до 03:00 МСК оказывается «в будущем» и пропадает из журнала.
+  const todayKey = mskDateKey(to);
   const deliveries = await prisma.linenDelivery.findMany({
-    where: { hotelId, deliveredAt: { gte: from, lte: to } },
-    orderBy: { deliveredAt: "desc" },
+    where: {
+      hotelId,
+      deliveredAt: {
+        gte: parseMskDateKey(mskAddDays(todayKey, -(periodDays - 1))),
+        lt: parseMskDateKey(mskDayAfter(todayKey)),
+      },
+    },
+    orderBy: [{ deliveredAt: "desc" }, { createdAt: "desc" }],
   });
 
   const deliveredTotals = deliveries.reduce(
