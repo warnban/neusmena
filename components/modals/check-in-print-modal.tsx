@@ -204,7 +204,7 @@ export function CheckInPrintModal({
             type="button"
             onClick={onContinue}
             className="flex items-center justify-center gap-1.5 flex-1 min-w-[140px] py-2.5 text-[13px] font-bold rounded-xl text-white hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+            style={{ background: "hsl(var(--primary))" }}
           >
             Далее — оплата
             <ArrowRight size={14} />

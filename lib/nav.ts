@@ -5,6 +5,8 @@ export interface NavItem {
   href: string;
   icon: string;
   label: string;
+  /** Виден только владельцу и управляющему. */
+  managerOnly?: boolean;
 }
 
 export const MOBILE_TAB_ITEMS: NavItem[] = [

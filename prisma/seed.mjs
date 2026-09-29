@@ -35,11 +35,11 @@ const EXPENSES = [
 ];
 
 const PAYMENT_METHODS = [
-  { code: "cash", label: "Наличные", color: "#059669", bg: "#F0FDF4", icon: "Banknote", sortOrder: 0 },
-  { code: "card", label: "Карта", color: "#2563EB", bg: "#EFF6FF", icon: "CreditCard", sortOrder: 1 },
-  { code: "transfer", label: "Перевод", color: "#7C3AED", bg: "#F5F3FF", icon: "ArrowDownLeft", sortOrder: 2 },
-  { code: "ota", label: "OTA предопл.", color: "#D97706", bg: "#FFFBEB", icon: "Globe", sortOrder: 3 },
-  { code: "online", label: "Онлайн/СБП", color: "#0891B2", bg: "#ECFEFF", icon: "Smartphone", sortOrder: 4 },
+  { code: "cash", label: "Наличные", color: "hsl(var(--success))", bg: "hsl(var(--success) / 0.12)", icon: "Banknote", sortOrder: 0 },
+  { code: "card", label: "Карта", color: "hsl(var(--primary))", bg: "hsl(var(--primary) / 0.12)", icon: "CreditCard", sortOrder: 1 },
+  { code: "transfer", label: "Перевод", color: "hsl(var(--muted-foreground))", bg: "hsl(var(--muted-foreground) / 0.12)", icon: "ArrowDownLeft", sortOrder: 2 },
+  { code: "ota", label: "OTA предопл.", color: "hsl(var(--warning))", bg: "hsl(var(--warning) / 0.12)", icon: "Globe", sortOrder: 3 },
+  { code: "online", label: "Онлайн/СБП", color: "hsl(var(--primary))", bg: "hsl(var(--primary) / 0.12)", icon: "Smartphone", sortOrder: 4 },
 ];
 
 const SERVICES = [
@@ -149,6 +149,7 @@ async function main() {
       devPasswordPlain: "demo123",
       name: "Анна Дмитриева",
       role: "owner",
+      emailVerifiedAt: new Date(),
     },
   });
 
@@ -228,10 +229,10 @@ async function main() {
 
   console.log("Каналы...");
   const CHANNELS = [
-    { hotelId: "h1", name: "Booking.com", code: "booking", color: "#16A34A", status: "ok", inventory: 8, rate: 4200, commission: 15, bookingsMonth: 47, revenueMonth: 185000, lastSyncMin: 2 },
-    { hotelId: "h1", name: "Expedia", code: "expedia", color: "#2563EB", status: "ok", inventory: 8, rate: 4350, commission: 18, bookingsMonth: 28, revenueMonth: 98000, lastSyncMin: 5 },
-    { hotelId: "h1", name: "Ostrovok", code: "ostrovok", color: "#DC2626", status: "err", inventory: 6, rate: 3900, commission: 12, bookingsMonth: 19, revenueMonth: 67000, lastSyncMin: 32 },
-    { hotelId: "h1", name: "Яндекс", code: "yandex", color: "#EA580C", status: "ok", inventory: 8, rate: 4000, commission: 10, bookingsMonth: 12, revenueMonth: 43000, lastSyncMin: 8 },
+    { hotelId: "h1", name: "Booking.com", code: "booking", color: "hsl(var(--primary))", status: "ok", inventory: 8, rate: 4200, commission: 15, bookingsMonth: 47, revenueMonth: 185000, lastSyncMin: 2 },
+    { hotelId: "h1", name: "Expedia", code: "expedia", color: "hsl(var(--muted-foreground))", status: "ok", inventory: 8, rate: 4350, commission: 18, bookingsMonth: 28, revenueMonth: 98000, lastSyncMin: 5 },
+    { hotelId: "h1", name: "Ostrovok", code: "ostrovok", color: "hsl(var(--destructive))", status: "err", inventory: 6, rate: 3900, commission: 12, bookingsMonth: 19, revenueMonth: 67000, lastSyncMin: 32 },
+    { hotelId: "h1", name: "Яндекс", code: "yandex", color: "hsl(var(--success))", status: "ok", inventory: 8, rate: 4000, commission: 10, bookingsMonth: 12, revenueMonth: 43000, lastSyncMin: 8 },
   ];
   for (const ch of CHANNELS) await prisma.channel.create({ data: ch });
 

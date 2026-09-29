@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Guest" ADD COLUMN "flagged" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Guest" ADD COLUMN "blacklisted" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Guest" ADD COLUMN "flagReason" TEXT NOT NULL DEFAULT '';

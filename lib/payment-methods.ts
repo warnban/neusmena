@@ -17,11 +17,11 @@ export type PmConfigEntry = {
 };
 
 export const DEFAULT_PAYMENT_METHODS: Omit<PaymentMethodDef, "id" | "active">[] = [
-  { code: "cash", label: "Наличные", color: "#059669", bg: "#F0FDF4", icon: "Banknote", sortOrder: 0 },
-  { code: "card", label: "Карта", color: "#2563EB", bg: "#EFF6FF", icon: "CreditCard", sortOrder: 1 },
-  { code: "transfer", label: "Перевод", color: "#7C3AED", bg: "#F5F3FF", icon: "ArrowDownLeft", sortOrder: 2 },
-  { code: "ota", label: "OTA предопл.", color: "#D97706", bg: "#FFFBEB", icon: "Globe", sortOrder: 3 },
-  { code: "online", label: "Онлайн/СБП", color: "#0891B2", bg: "#ECFEFF", icon: "Smartphone", sortOrder: 4 },
+  { code: "cash", label: "Наличные", color: "hsl(var(--success))", bg: "hsl(var(--success) / 0.12)", icon: "Banknote", sortOrder: 0 },
+  { code: "card", label: "Карта", color: "hsl(var(--primary))", bg: "hsl(var(--primary) / 0.12)", icon: "CreditCard", sortOrder: 1 },
+  { code: "transfer", label: "Перевод", color: "hsl(var(--muted-foreground))", bg: "hsl(var(--muted-foreground) / 0.12)", icon: "ArrowDownLeft", sortOrder: 2 },
+  { code: "ota", label: "OTA предопл.", color: "hsl(var(--warning))", bg: "hsl(var(--warning) / 0.12)", icon: "Globe", sortOrder: 3 },
+  { code: "online", label: "Онлайн/СБП", color: "hsl(var(--primary))", bg: "hsl(var(--primary) / 0.12)", icon: "Smartphone", sortOrder: 4 },
 ];
 
 export function buildPmConfig(methods: PaymentMethodDef[]): Record<string, PmConfigEntry> {

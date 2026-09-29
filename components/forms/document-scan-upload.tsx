@@ -142,7 +142,7 @@ export function DocumentScanUpload({
           className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 text-[12px] font-bold rounded-xl text-white cursor-pointer w-full sm:w-auto ${
             disabled || busy ? "opacity-50 pointer-events-none" : "hover:opacity-90"
           }`}
-          style={{ background: "linear-gradient(135deg,#6366F1,#4F46E5)" }}
+          style={{ background: "hsl(var(--primary))" }}
           onClick={(e) => e.stopPropagation()}
         >
           <Upload size={14} />
@@ -170,7 +170,7 @@ export function DocumentScanUpload({
             status === "ok"
               ? "bg-success/10 text-success"
               : status === "warn"
-                ? "bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]"
+                ? "bg-warning/10 text-warning border border-warning/30"
                 : "bg-destructive/10 text-destructive"
           }`}
         >

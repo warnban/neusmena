@@ -85,6 +85,7 @@ export async function getPlatformSeatsWithHotels() {
         phone: hotel.phone,
         email: hotel.email,
         legalName: hotel.legalName,
+        aiEnabled: hotel.aiEnabled,
         createdAt: hotel.createdAt.toISOString(),
         revenue,
         activeBookings,
@@ -96,6 +97,7 @@ export async function getPlatformSeatsWithHotels() {
     return {
       id: seat.id,
       name: seat.name,
+      plan: seat.plan,
       createdAt: seat.createdAt.toISOString(),
       owner: seat.owner,
       usersCount: seat._count.users,

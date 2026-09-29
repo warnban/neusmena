@@ -126,6 +126,17 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // Optimistic decrement: списываем ровно `amount` из paid ТОЛЬКО если
+      // текущее paid >= amount. Если параллельный refund уже снял часть суммы,
+      // updateMany вернёт count=0 и мы откатим транзакцию через throw.
+      const dec = await tx.booking.updateMany({
+        where: { id: ctx.booking.id, paid: { gte: amount } },
+        data: { paid: { decrement: amount } },
+      });
+      if (dec.count !== 1) {
+        throw new Error("REFUND_CONFLICT");
+      }
+
       const transaction = await tx.transaction.create({
         data: {
           hotelId,
@@ -141,9 +152,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      const updatedBooking = await tx.booking.update({
+      const updatedBooking = await tx.booking.findUniqueOrThrow({
         where: { id: ctx.booking.id },
-        data: { paid: Math.max(0, ctx.booking.paid - amount) },
       });
 
       const refund = await tx.refundRecord.create({
@@ -162,7 +172,17 @@ export async function POST(req: NextRequest) {
       });
 
       return { transaction, updatedBooking, refund };
+    }).catch((e) => {
+      if (e instanceof Error && e.message === "REFUND_CONFLICT") return null;
+      throw e;
     });
+
+    if (!result) {
+      return NextResponse.json(
+        { error: "Сумма возврата превышает оплаченное — возможно, параллельно уже был проведён возврат" },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({
       ok: true,

@@ -73,7 +73,7 @@ export function TopBar({
         className="w-full pl-8 pr-3 py-1.5 text-[12px] rounded-lg outline-none focus:ring-1 focus:ring-ring bg-muted border border-border text-foreground placeholder:text-muted-foreground/60"
       />
       {open && (
-        <div className="absolute right-0 left-0 sm:left-auto sm:w-72 top-full mt-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 max-h-80 overflow-y-auto custom-scrollbar">
+        <div className="absolute right-0 left-0 sm:left-auto sm:w-72 top-full mt-1 bg-popover border border-border rounded-lg shadow-overlay overflow-hidden z-50 max-h-80 overflow-y-auto custom-scrollbar">
           {!hasResults && <div className="px-3 py-4 text-[12px] text-muted-foreground text-center">Ничего не найдено</div>}
           {results?.guests.map((g) => (
             <button
@@ -119,7 +119,7 @@ export function TopBar({
     <div className="bg-card px-4 md:px-6 py-3 flex-shrink-0 border-b border-border sticky top-0 z-30">
       <div className="flex items-center justify-between gap-2 min-w-0">
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-bold text-foreground truncate">{title}</h1>
+          <h1 className="font-display text-[19px] font-semibold text-foreground truncate leading-tight">{title}</h1>
           {subtitle && <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{subtitle}</p>}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">

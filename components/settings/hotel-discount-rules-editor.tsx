@@ -189,7 +189,7 @@ export function HotelDiscountRulesEditor({
               disabled={busy}
               onClick={save}
               className="px-5 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+              style={{ background: "hsl(var(--primary))" }}
             >
               {busy ? "Сохранение…" : "Сохранить скидки"}
             </button>

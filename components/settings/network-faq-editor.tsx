@@ -100,7 +100,7 @@ export function NetworkFaqEditor({ canEdit }: { canEdit: boolean }) {
           onClick={() => void save()}
           disabled={busy}
           className="flex items-center gap-1.5 px-4 py-2 text-white text-[12px] font-bold rounded-lg disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+          style={{ background: "hsl(var(--primary))" }}
         >
           <Save size={14} />
           {busy ? "Сохранение…" : "Сохранить FAQ"}

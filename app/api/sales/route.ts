@@ -5,6 +5,13 @@ import {
   assertPaymentOperationAllowed,
   resolveTransactionDateInput,
 } from "@/lib/transaction-date.server";
+import {
+  allocateSplitAcrossItems,
+  isSplitPayment,
+  newPaymentGroupId,
+  sanitizeSplitParts,
+  validateSplitParts,
+} from "@/lib/payment-split";
 
 type SaleItem = { serviceId: string; qty: number };
 
@@ -64,46 +71,67 @@ export async function POST(req: NextRequest) {
   }
 
   const svcMap = Object.fromEntries(services.map((s) => [s.id, s]));
-  const ops = [];
-  let total = 0;
-
-  for (const item of items) {
+  const lineItems = items.map((item) => {
     const svc = svcMap[item.serviceId];
     const qty = Math.max(1, Math.round(Number(item.qty) || 1));
-    const amount = svc.price * qty;
-    total += amount;
+    return { svc, qty, amount: svc.price * qty, category: svc.category, name: svc.name };
+  });
+  const total = lineItems.reduce((sum, l) => sum + l.amount, 0);
 
-    if (kind === "service") {
+  // Смежная (раздельная) оплата: одна операция несколькими способами.
+  const splits = sanitizeSplitParts(body.splits);
+  const useSplit = isSplitPayment(splits);
+  if (useSplit) {
+    const check = validateSplitParts(splits, total);
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error }, { status: 400 });
+    }
+  }
+  const groupId = useSplit ? newPaymentGroupId() : null;
+  const ops = [];
+
+  if (kind === "service") {
+    for (const line of lineItems) {
       ops.push(
         prisma.serviceSale.create({
           data: {
             hotelId,
             bookingId,
-            serviceId: svc.id,
+            serviceId: line.svc.id,
             guestName: resolvedGuestName ?? "",
-            serviceName: svc.name,
-            serviceCategory: svc.category,
-            qty,
-            amount,
-            paymentMethod,
+            serviceName: line.svc.name,
+            serviceCategory: line.svc.category,
+            qty: line.qty,
+            amount: line.amount,
+            paymentMethod: useSplit ? splits[0].method : paymentMethod,
           },
         })
       );
     }
+  }
 
+  const txRows = useSplit
+    ? allocateSplitAcrossItems(
+        lineItems.map((l) => ({ category: l.category, name: l.name, amount: l.amount })),
+        splits
+      )
+    : lineItems.map((l) => ({ category: l.category, name: l.name, amount: l.amount, method: paymentMethod }));
+
+  for (const row of txRows) {
     ops.push(
       prisma.transaction.create({
         data: {
           hotelId,
           type: kind === "expense" ? "expense" : "service",
-          category: svc.category,
-          paymentMethod,
-          amount,
+          category: row.category,
+          paymentMethod: row.method,
+          amount: row.amount,
           date: dateResolved.date,
           bookingId,
           guestName: resolvedGuestName,
           roomNumber,
-          note: kind === "expense" ? (note ?? svc.name) : note,
+          note: kind === "expense" ? (note ?? row.name) : note,
+          ...(groupId ? { paymentGroupId: groupId } : {}),
         },
       })
     );

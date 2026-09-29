@@ -138,10 +138,45 @@ enum BonusRunStatus {
   paid
 }
 
+enum AccessPlan {
+  basic
+  premium
+}
+
+enum AccessOrderStatus {
+  pending
+  paid
+  provisioned
+  cancelled
+}
+
+enum IncidentType {
+  rule_violation
+  property_damage
+  public_order
+  access_control
+  intoxication
+  other
+}
+
+enum IncidentStatus {
+  open
+  resolved
+}
+
+enum IncidentAttachmentKind {
+  guest_explanation
+  rule_violation_act
+  property_damage_act
+  photo
+  other
+}
+
 // ─── Multi-tenant: «Сеть» (окружение владельца) ───────────────────────────────
 model Seat {
   id        String   @id @default(uuid())
   name      String
+  plan      AccessPlan @default(basic)
   owner     User     @relation("SeatOwner", fields: [ownerId], references: [id])
   ownerId   String   @unique
   users     User[]   @relation("SeatMembers")
@@ -158,8 +193,53 @@ model Seat {
   networkFaq     NetworkFaq?
   assistantConversations AssistantConversation[]
   botMigrationMaps BotMigrationMap[]
+  notePages      NotePage[]
+  noteCards      NoteCard[]
+  incidents      Incident[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model NotePage {
+  id        String      @id @default(uuid())
+  seat      Seat        @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  seatId    String
+  title     String      @default("Без названия")
+  sortOrder Int         @default(0)
+  tables    NoteTable[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([seatId])
+}
+
+model NoteTable {
+  id        String   @id @default(uuid())
+  page      NotePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId    String
+  title     String   @default("Таблица")
+  columns   Json?
+  rows      Json?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+}
+
+model NoteCard {
+  id        String   @id @default(uuid())
+  seat      Seat     @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  seatId    String
+  title     String   @default("")
+  body      String   @default("")
+  color     String   @default("default")
+  pinned    Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([seatId])
 }
 
 model TransactionCategoryDef {
@@ -189,6 +269,9 @@ model User {
   isBlocked    Boolean  @default(false)
   blockedAt    DateTime?
   devPasswordPlain String @default("")
+  emailVerifiedAt  DateTime?
+  emailVerifyToken String?
+  emailVerifyTokenExpires DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -238,10 +321,33 @@ model Hotel {
   linenEstimatedSets        Int?
   linenDeliveries           LinenDelivery[]
   utilityMeters             UtilityMeter[]
+  incidents                 Incident[]
+  /// AI Premium: включается разработчиком для отеля
+  aiEnabled                 Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([seatId])
+}
+
+model AccessOrder {
+  id            String            @id @default(uuid())
+  email         String
+  contactName   String
+  seatName      String
+  plan          AccessPlan
+  status        AccessOrderStatus @default(pending)
+  amountRub     Int
+  notes         String            @default("")
+  seatId        String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  paidAt        DateTime?
+  provisionedAt DateTime?
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model HotelDiscountRule {
@@ -391,6 +497,9 @@ model Guest {
   visits      Int     @default(0)
   preferences String  @default("")
   vip         Boolean @default(false)
+  flagged     Boolean @default(false)
+  blacklisted Boolean @default(false)
+  flagReason  String  @default("")
   totalSpent  Int     @default(0)
   regCardSigned Boolean @default(false)
 
@@ -805,11 +914,13 @@ model Transaction {
   discountRuleId          String?
   discountPercentApplied  Int?
   discountPerNightApplied Int?
+  paymentGroupId          String?
 
   @@index([hotelId])
   @@index([date])
   @@index([cancelledAt])
   @@index([organizationId])
+  @@index([paymentGroupId])
 }
 
 model HkTask {
@@ -966,6 +1077,49 @@ model RefundRecord {
   @@index([hotelId])
   @@index([bookingId])
   @@index([createdAt])
+}
+
+/// Журнал происшествий — фиксация нарушений правил проживания и порядка
+model Incident {
+  id           String               @id @default(uuid())
+  seat         Seat                 @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  seatId       String
+  hotel        Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotelId      String
+  occurredAt   DateTime             @default(now())
+  type         IncidentType         @default(rule_violation)
+  status       IncidentStatus       @default(open)
+  guestName    String               @default("")
+  roomNumber   String               @default("")
+  location     String               @default("")
+  description  String               @default("")
+  actionsTaken String               @default("")
+  policeCalled Boolean              @default(false)
+  witnesses    String               @default("")
+  damageAmount Int                  @default(0)
+  createdByName String              @default("")
+  attachments  IncidentAttachment[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([seatId])
+  @@index([hotelId])
+  @@index([occurredAt])
+  @@index([status])
+}
+
+model IncidentAttachment {
+  id         String                 @id @default(uuid())
+  incident   Incident               @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  incidentId String
+  kind       IncidentAttachmentKind @default(other)
+  name       String
+  filePath   String
+  mimeType   String                 @default("")
+  size       String                 @default("")
+  uploadedAt DateTime               @default(now())
+
+  @@index([incidentId])
 }
 
 /// FAQ сети (один на seat) — для AI-помощника админов

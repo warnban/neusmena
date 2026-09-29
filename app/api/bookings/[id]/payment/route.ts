@@ -17,7 +17,19 @@ import {
   prepaidNights,
 } from "@/lib/booking-payment-due";
 import { mskAddDays, mskDateKey, mskNightDiff } from "@/lib/msk-time";
-import { formatRuleLabel, hotelHasDiscountRules, validatePaymentDiscount } from "@/lib/hotel-discount-rules";
+import {
+  calcNightPaymentTotal,
+  formatRuleLabel,
+  hotelHasDiscountRules,
+  validatePaymentDiscount,
+} from "@/lib/hotel-discount-rules";
+import {
+  isSplitPayment,
+  newPaymentGroupId,
+  sanitizeSplitParts,
+  sumSplitParts,
+  validateSplitParts,
+} from "@/lib/payment-split";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -25,6 +37,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const booking = auth.booking;
+    if (booking.status === "cancelled" || booking.status === "checkedout") {
+      return NextResponse.json(
+        { error: "Нельзя принять оплату по отменённой или выселенной броне" },
+        { status: 400 }
+      );
+    }
     const body = await req.json();
     const session = auth.session;
 
@@ -92,6 +110,78 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Слишком много ночей для оплаты" }, { status: 400 });
     }
 
+    const paidThroughDateResolved = paidThroughRaw || mskAddDays(firstUnpaidKey, nights - 1);
+
+    // Смежная (раздельная) оплата: несколько способов на одну операцию.
+    const splits = sanitizeSplitParts(body.splits);
+    if (isSplitPayment(splits)) {
+      // При смежной оплате правило-скидка не применяется — обычный тариф.
+      const manualPct = useRules ? 0 : discountPercent;
+      const manualPerNight = useRules ? 0 : discountPerNight;
+      const expectedTotal = calcNightPaymentTotal(booking.room.price, nights, manualPct, manualPerNight);
+
+      const splitCheck = validateSplitParts(splits, expectedTotal);
+      if (!splitCheck.ok) {
+        return NextResponse.json({ error: splitCheck.error }, { status: 400 });
+      }
+
+      const total = sumSplitParts(splits);
+      const groupId = newPaymentGroupId();
+      const amountChanged = !useRules && contractAmount !== booking.amount;
+      const discountChanged =
+        !useRules &&
+        (discountPercent !== (booking.discountPercent ?? 0) || discountPerNight !== (booking.discountPerNight ?? 0));
+
+      const bookingForNote = {
+        ...booking,
+        amount: useRules ? booking.amount || contractAmount : contractAmount,
+        discountPercent: manualPct,
+        discountPerNight: manualPerNight,
+      };
+      const baseNote = buildAccommodationPaymentNote(bookingForNote, total, {
+        paidBefore: booking.paid,
+        extra: `Оплачено до ${paidThroughDateResolved} 12:00`,
+        userNote: body.note ?? null,
+      });
+
+      const txOps = splits.map((part, i) =>
+        prisma.transaction.create({
+          data: {
+            hotelId: booking.hotelId,
+            type: "payment",
+            category: "accommodation",
+            paymentMethod: part.method,
+            amount: part.amount,
+            date: dateResolved.date,
+            bookingId: booking.id,
+            guestName: booking.guestName,
+            roomNumber: booking.room.number,
+            paymentNights: nights,
+            discountRuleId: null,
+            discountPercentApplied: manualPct,
+            discountPerNightApplied: manualPerNight,
+            paymentGroupId: groupId,
+            note: `${baseNote}. Смежная оплата ${i + 1}/${splits.length}`,
+          },
+        })
+      );
+
+      await prisma.$transaction([
+        ...txOps,
+        prisma.booking.update({
+          where: { id: booking.id },
+          data: {
+            paid: { increment: total },
+            ...(amountChanged || discountChanged
+              ? { amount: contractAmount, discountPercent: manualPct, discountPerNight: manualPerNight }
+              : {}),
+          },
+        }),
+      ]);
+      const updated = await prisma.booking.findUnique({ where: { id: booking.id } });
+      return NextResponse.json({ ok: true, booking: updated });
+    }
+
     const paymentMethod = String(body.paymentMethod ?? "cash");
     const amount = body.amount != null ? Math.round(Number(body.amount)) : 0;
 
@@ -150,7 +240,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       discountPerNight: useRules ? booking.discountPerNight ?? 0 : validation.discountPerNight,
     };
 
-    const [, updated] = await prisma.$transaction([
+    await prisma.$transaction([
       prisma.transaction.create({
         data: {
           hotelId: booking.hotelId,
@@ -177,7 +267,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       prisma.booking.update({
         where: { id: booking.id },
         data: {
-          paid: booking.paid + validation.expectedAmount,
+          paid: { increment: validation.expectedAmount },
           ...(amountChanged || discountChanged
             ? {
                 amount: contractAmount,
@@ -190,6 +280,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }),
     ]);
 
+    const updated = await prisma.booking.findUnique({ where: { id: booking.id } });
     return NextResponse.json({ ok: true, booking: updated });
   } catch (e) {
     console.error("[payment]", e);

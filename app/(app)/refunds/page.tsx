@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Upload, Eye, X, FileImage, RotateCcw } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate } from "@/lib/format";
@@ -61,7 +62,7 @@ export default function RefundsPage() {
     return (
       <>
         <TopBar title="Возвраты" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={8} cols={5} /></div>
       </>
     );
   }

@@ -65,10 +65,10 @@ function ComparisonTableRow({ row }: { row: ComparisonRow }) {
         {row.label}
       </td>
       <td className="py-1.5 sm:py-2.5 px-0.5 sm:px-2 text-right">
-        <ValueCell value={row.left} color="#2563EB" />
+        <ValueCell value={row.left} color="hsl(var(--primary))" />
       </td>
       <td className="py-1.5 sm:py-2.5 px-0.5 sm:px-2 text-right">
-        <ValueCell value={row.right} color="#D97706" />
+        <ValueCell value={row.right} color="hsl(var(--warning))" />
       </td>
       <td className="py-1.5 sm:py-2.5 pl-0.5 sm:pl-2 text-right">
         <DiffCell left={row.left} right={row.right} kind={row.kind} />
@@ -162,7 +162,7 @@ export function MonthComparisonPanel({
               const key = monthKeyToString(m);
               return { value: key, label: monthLabel(m) };
             })}
-            className="border-2 border-[#8B5CF6]/50 [&>button]:bg-card [&>button]:font-semibold"
+            className="border-2 border-primary/40 [&>button]:bg-card [&>button]:font-semibold"
           />
         </div>
         <div className="min-w-[160px]">
@@ -176,7 +176,7 @@ export function MonthComparisonPanel({
               const key = monthKeyToString(m);
               return { value: key, label: monthLabel(m) };
             })}
-            className="border-2 border-[#F59E0B]/50 [&>button]:bg-card [&>button]:font-semibold"
+            className="border-2 border-warning/40 [&>button]:bg-card [&>button]:font-semibold"
           />
         </div>
       </div>
@@ -221,11 +221,11 @@ export function MonthComparisonPanel({
             <thead>
               <tr className="text-[9px] sm:text-[11px] font-bold text-muted-foreground uppercase border-b border-border">
                 <th className="text-left py-1.5 sm:py-2 pr-1 sm:pr-3 w-[38%]">Категория</th>
-                <th className="text-right py-1.5 sm:py-2 px-0.5 sm:px-2 w-[20%]" style={{ color: "#2563EB" }}>
+                <th className="text-right py-1.5 sm:py-2 px-0.5 sm:px-2 w-[20%]" style={{ color: "hsl(var(--primary))" }}>
                   <span className="hidden sm:inline">{leftLabel}</span>
                   <span className="sm:hidden">{leftLabelShort}</span>
                 </th>
-                <th className="text-right py-1.5 sm:py-2 px-0.5 sm:px-2 w-[20%]" style={{ color: "#D97706" }}>
+                <th className="text-right py-1.5 sm:py-2 px-0.5 sm:px-2 w-[20%]" style={{ color: "hsl(var(--warning))" }}>
                   <span className="hidden sm:inline">{rightLabel}</span>
                   <span className="sm:hidden">{rightLabelShort}</span>
                 </th>

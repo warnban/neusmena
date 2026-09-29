@@ -17,6 +17,13 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-inter)", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        display: ["var(--font-serif)", "Georgia", "Times New Roman", "serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
+      },
+      fontSize: {
+        eyebrow: ["11px", { lineHeight: "1.2", letterSpacing: "0.08em", fontWeight: "600" }],
+        data: ["13px", "18px"],
+        display: ["24px", { lineHeight: "1.15", letterSpacing: "-0.01em" }],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -39,6 +46,9 @@ const config: Config = {
         success: {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
+        },
+        vip: {
+          DEFAULT: "hsl(var(--vip))",
         },
         warning: {
           DEFAULT: "hsl(var(--warning))",
@@ -72,7 +82,10 @@ const config: Config = {
         xl: "calc(var(--radius) + 4px)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        sm: "calc(var(--radius) - 3px)",
+      },
+      boxShadow: {
+        overlay: "0 4px 16px -4px rgb(30 33 29 / 0.18), 0 1px 2px rgb(30 33 29 / 0.08)",
       },
       keyframes: {
         "accordion-down": {

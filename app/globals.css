@@ -2,92 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Дизайн-токены макета asmena2 ─────────────────────────────── */
+/* ─── Дизайн-токены «Concierge Ledger» — Smena CRM ─────────────── */
 @layer base {
   :root {
-    --background: 210 40% 96.1%;
-    --foreground: 217.2 32.6% 17.5%;
+    --background: 43 30% 93%;      /* paper-100 — тёплый бумажный фон */
+    --foreground: 100 6% 12%;      /* ink-900  — чернильный текст */
 
-    --card: 0 0% 100%;
-    --card-foreground: 217.2 32.6% 17.5%;
+    --card: 45 33% 98%;            /* surface */
+    --card-foreground: 100 6% 12%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 217.2 32.6% 17.5%;
+    --popover: 0 0% 100%;          /* surface-raised (оверлеи) */
+    --popover-foreground: 100 6% 12%;
 
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 172 51% 24%;        /* accent-600 — пихтовый/verdigris */
+    --primary-foreground: 45 33% 98%;
 
-    --secondary: 213.8 100% 96.9%;
-    --secondary-foreground: 226 70.7% 40.2%;
+    --secondary: 43 30% 88%;       /* paper-200 */
+    --secondary-foreground: 100 6% 20%;
 
-    --muted: 210 40% 98%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 43 30% 93%;
+    --muted-foreground: 100 5% 37%;/* ink-500 */
 
-    --accent: 213.8 100% 96.9%;
-    --accent-foreground: 217.2 91.2% 59.8%;
+    --accent: 168 27% 91%;         /* accent-100 — тихий акцентный фон */
+    --accent-foreground: 172 51% 24%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 4 56% 45%;      /* brick — приглушённый красный */
+    --destructive-foreground: 45 33% 98%;
 
-    --success: 152 76% 36%;
-    --success-foreground: 0 0% 100%;
+    --success: 149 45% 34%;        /* emerald-forest */
+    --success-foreground: 45 33% 98%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 39 71% 40%;         /* ochre */
+    --warning-foreground: 45 33% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 217.2 91.2% 59.8%;
+    --border: 43 28% 87%;          /* hairline */
+    --input: 43 28% 87%;
+    --ring: 172 51% 24%;
 
-    --chart-1: 217.2 91.2% 59.8%;
-    --chart-2: 160 84% 39%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 0 84% 60%;
-    --chart-5: 239 84% 67%;
+    --chart-1: 172 51% 24%;        /* pine */
+    --chart-2: 149 45% 34%;        /* emerald */
+    --chart-3: 39 71% 40%;         /* ochre */
+    --chart-4: 4 56% 45%;          /* brick */
+    --chart-5: 100 5% 37%;         /* slate/ink */
 
-    --radius: 0.75rem;
+    --vip: 41 51% 40%;             /* gold — VIP/loyalty */
+
+    --radius: 0.375rem;            /* 6px — сдержанный */
   }
 
   .dark {
-    --background: 222.2 47.4% 11.2%;
-    --foreground: 214.3 31.8% 91.4%;
+    --background: 100 6% 9%;
+    --foreground: 45 22% 90%;
 
-    --card: 217.2 32.6% 17.5%;
-    --card-foreground: 214.3 31.8% 91.4%;
+    --card: 90 5% 13%;
+    --card-foreground: 45 22% 90%;
 
-    --popover: 217.2 32.6% 17.5%;
-    --popover-foreground: 214.3 31.8% 91.4%;
+    --popover: 96 6% 15%;
+    --popover-foreground: 45 22% 90%;
 
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 172 52% 30%;
+    --primary-foreground: 45 22% 92%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 214.3 31.8% 91.4%;
+    --secondary: 96 6% 18%;
+    --secondary-foreground: 45 22% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 100 6% 10%;
+    --muted-foreground: 90 5% 65%;
 
-    --accent: 224 64% 33%;
-    --accent-foreground: 213.3 96.9% 87.3%;
+    --accent: 168 26% 16%;
+    --accent-foreground: 172 40% 70%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 4 50% 50%;
+    --destructive-foreground: 45 22% 92%;
 
-    --success: 152 60% 45%;
-    --success-foreground: 0 0% 100%;
+    --success: 149 40% 42%;
+    --success-foreground: 45 22% 92%;
 
-    --warning: 38 92% 55%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 39 65% 48%;
+    --warning-foreground: 45 22% 92%;
 
-    --border: 215 25% 27%;
-    --input: 215 25% 27%;
-    --ring: 217.2 91.2% 59.8%;
+    --border: 96 8% 20%;
+    --input: 96 8% 20%;
+    --ring: 172 52% 40%;
 
-    --chart-1: 217.2 91.2% 59.8%;
-    --chart-2: 160 70% 45%;
-    --chart-3: 38 92% 55%;
-    --chart-4: 0 72% 58%;
-    --chart-5: 239 84% 72%;
+    --chart-1: 172 52% 40%;
+    --chart-2: 149 40% 42%;
+    --chart-3: 39 65% 48%;
+    --chart-4: 4 50% 50%;
+    --chart-5: 90 5% 65%;
+
+    --vip: 41 45% 55%;
   }
 }
 
@@ -102,6 +106,26 @@
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
+  }
+}
+
+/* ─── Типографические утилиты направления ──────────────────────── */
+@layer components {
+  .font-display {
+    font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+    letter-spacing: -0.01em;
+  }
+  .tabular {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .eyebrow {
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(var(--muted-foreground));
   }
 }
 
@@ -124,11 +148,11 @@
 .recharts-cartesian-grid line { stroke: hsl(var(--border)) !important; }
 .recharts-cartesian-axis-tick text { fill: hsl(var(--muted-foreground)) !important; }
 .recharts-default-tooltip {
-  background: hsl(var(--card)) !important;
+  background: hsl(var(--popover)) !important;
   border: 1px solid hsl(var(--border)) !important;
   border-radius: 0.5rem !important;
-  color: hsl(var(--card-foreground)) !important;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1) !important;
+  color: hsl(var(--popover-foreground)) !important;
+  box-shadow: 0 4px 16px -4px rgb(30 33 29 / 0.18), 0 1px 2px rgb(30 33 29 / 0.08) !important;
 }
 
 /* ─── Mobile shell / PWA ─────────────────────────────────────────── */
@@ -158,4 +182,9 @@
   .pb-safe {
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
+}
+
+/* Превью на лендинге — только демонстрация, без интеракций */
+.landing-preview-root .app-bottom-nav {
+  display: none;
 }

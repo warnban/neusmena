@@ -63,7 +63,22 @@ export async function loadRefundContext(bookingId: string, hotelId: string, seat
 
   const refundNightsTotal = refundRecords.reduce((s, r) => s + r.nights, 0);
   const roomPrice = booking.room.price;
-  const payments: AccommodationPaymentSlice[] = accommodationPaymentTransactions(bookingId, transactions).map((t) => {
+  const rawPayments = accommodationPaymentTransactions(bookingId, transactions);
+
+  // Смежные (split) части одного платежа: nights одинаковые у всех, суммы разные.
+  // При построении payment slices слепляем их в одну запись: nights один раз,
+  // amount — сумма частей, dominant paymentMethod и скидки — из первой части.
+  const bySlice = new Map<string, {
+    nights: number;
+    amount: number;
+    methodTotals: Map<string, number>;
+    discountPercent: number;
+    discountPerNight: number;
+    discountRuleId: string | null | undefined;
+  }>();
+  const singles: AccommodationPaymentSlice[] = [];
+
+  for (const t of rawPayments) {
     const discountPercent = t.discountPercentApplied ?? 0;
     const discountPerNight = t.discountPerNightApplied ?? 0;
     let nights = t.paymentNights ?? 0;
@@ -71,15 +86,50 @@ export async function loadRefundContext(bookingId: string, hotelId: string, seat
       const sampleNightly = Math.max(1, calcNightPaymentTotal(roomPrice, 1, discountPercent, discountPerNight));
       nights = Math.max(1, Math.round(t.amount / sampleNightly));
     }
+    if (t.paymentGroupId) {
+      const g = bySlice.get(t.paymentGroupId);
+      if (g) {
+        g.amount += t.amount;
+        g.methodTotals.set(t.paymentMethod, (g.methodTotals.get(t.paymentMethod) ?? 0) + t.amount);
+      } else {
+        bySlice.set(t.paymentGroupId, {
+          nights,
+          amount: t.amount,
+          methodTotals: new Map([[t.paymentMethod, t.amount]]),
+          discountPercent,
+          discountPerNight,
+          discountRuleId: t.discountRuleId,
+        });
+      }
+    } else {
+      singles.push({
+        nights,
+        amount: t.amount,
+        paymentMethod: t.paymentMethod,
+        discountPercent,
+        discountPerNight,
+        discountRuleId: t.discountRuleId,
+      });
+    }
+  }
+
+  const grouped: AccommodationPaymentSlice[] = Array.from(bySlice.values()).map((g) => {
+    let dominantMethod = "cash";
+    let bestSum = -1;
+    for (const [m, s] of Array.from(g.methodTotals.entries())) {
+      if (s > bestSum) { dominantMethod = m; bestSum = s; }
+    }
     return {
-      nights,
-      amount: t.amount,
-      paymentMethod: t.paymentMethod,
-      discountPercent,
-      discountPerNight,
-      discountRuleId: t.discountRuleId,
+      nights: g.nights,
+      amount: g.amount,
+      paymentMethod: dominantMethod,
+      discountPercent: g.discountPercent,
+      discountPerNight: g.discountPerNight,
+      discountRuleId: g.discountRuleId,
     };
   });
+
+  const payments: AccommodationPaymentSlice[] = [...singles, ...grouped];
 
   const bookingDto = {
     ...booking,

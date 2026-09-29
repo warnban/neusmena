@@ -75,6 +75,7 @@ export function CheckInPaymentModal({
                 discountPerNight: useRules ? 0 : payload.discountPerNight,
                 discountRuleId: payload.discountRuleId,
                 operationDate: payload.operationDate,
+                paymentSplits: payload.splits,
               }
             : {}),
         }),
@@ -150,7 +151,7 @@ export function CheckInPaymentModal({
                 onClick={handleCheckInWithoutPayment}
                 disabled={busy}
                 className="w-full flex items-center justify-center gap-2 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-                style={{ background: "linear-gradient(135deg,#10B981,#059669)" }}
+                style={{ background: "hsl(var(--success))" }}
               >
                 <CreditCard size={14} /> {busy ? "Заселение…" : "Заселить"}
               </button>

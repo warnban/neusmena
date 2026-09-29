@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { RoomFormModal } from "@/components/modals/room-form-modal";
 import { useApp } from "@/components/providers/app-data";
 import { money } from "@/lib/format";
@@ -93,7 +94,7 @@ export default function RoomsPage() {
     return (
       <>
         <TopBar title="Номерной фонд" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={8} cols={5} /></div>
       </>
     );
   }
@@ -145,7 +146,7 @@ export default function RoomsPage() {
             <button
               onClick={() => { setEditRoom(null); setShowForm(true); }}
               className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-white text-[12px] font-bold rounded-lg shadow-sm hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+              style={{ background: "hsl(var(--primary))" }}
             >
               <Plus size={13} /> Добавить
             </button>
@@ -180,7 +181,7 @@ export default function RoomsPage() {
                         <div className="flex items-start gap-2 px-2.5 pt-2.5 pb-2 border-b border-border/60">
                           <div
                             className="w-1 self-stretch rounded-full shrink-0 min-h-[28px]"
-                            style={{ background: isDorm ? "#8B5CF6" : rs.color }}
+                            style={{ background: isDorm ? "hsl(var(--primary))" : rs.color }}
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline justify-between gap-1">

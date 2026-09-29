@@ -66,7 +66,7 @@ export default function PlatformOverviewPage() {
       ) : (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
           <StatCard label="Сети (Seat)" value={data.seatsCount} icon={Building2} accent="text-violet-400" />
-          <StatCard label="Отели" value={data.hotelsCount} icon={Hotel} accent="text-blue-400" />
+          <StatCard label="Отели" value={data.hotelsCount} icon={Hotel} accent="text-primary" />
           <StatCard label="Пользователи" value={data.usersCount} icon={Users} accent="text-emerald-400" />
           <StatCard label="Заблокировано" value={data.blockedCount} icon={Ban} accent="text-red-400" />
           <StatCard label="Гости" value={data.guestsCount} icon={Users} accent="text-amber-400" />

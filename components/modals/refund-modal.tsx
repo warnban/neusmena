@@ -282,7 +282,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
                       className="flex-1 py-2 text-[12px] font-bold rounded-lg border transition-all"
                       style={{
                         borderColor: withholdNights === v ? "#EF4444" : "hsl(var(--border))",
-                        background: withholdNights === v ? "#FEF2F2" : undefined,
+                        background: withholdNights === v ? "hsl(var(--destructive) / 0.1)" : undefined,
                         color: withholdNights === v ? "#DC2626" : undefined,
                       }}
                     >
@@ -370,7 +370,7 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
               onClick={submit}
               disabled={busy || !selected.canRefund || nights <= 0 || nights > (quote?.maxRefundNights ?? selected.refundableNights) || refundAmount <= 0}
               className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#EF4444,#DC2626)" }}
+              style={{ background: "hsl(var(--destructive))" }}
             >
               {busy ? "Проведение…" : `Вернуть ${money(refundAmount)}`}
             </button>

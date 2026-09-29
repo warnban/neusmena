@@ -13,7 +13,7 @@ CRM для гостиниц: бронирования, заселение, фи�
 cp .env.example .env
 # Заполните DATABASE_URL и JWT_SECRET
 
-docker compose -f docker-compose.dev.yml up -d   # Postgres на порту 5433
+docker compose -f docker-compose.dev.yml up -d   # Postgres на порту 5434
 npm install
 npm run db:migrate:dev -- --name init            # или: npm run db:push
 npm run generate:guest-forms                     # если нет .docx в templates/guest-forms/

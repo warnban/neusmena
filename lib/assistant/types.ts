@@ -108,4 +108,5 @@ export type CheckInPayload = {
   skipPayment?: boolean;
   channelId?: string;
   date?: string;
+  paymentSplits?: { method: string; amount: number }[];
 };

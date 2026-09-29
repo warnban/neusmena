@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { setBedStatus } from "@/lib/dorm.server";
 import { apiErrorMessage } from "@/lib/api-error";
+import { hasBookingDateOverlap } from "@/lib/booking-availability.server";
+import { mskDateKey } from "@/lib/msk-time";
 
 /** Отмена выселения: возврат гостя в статус «Заселён». */
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -34,6 +36,22 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
           { status: 400 }
         );
       }
+    }
+
+    // Проверка: не занял ли это место кто-то другой после выселения.
+    const conflict = await hasBookingDateOverlap({
+      hotelId: booking.hotelId,
+      checkIn: mskDateKey(booking.checkIn),
+      checkOut: mskDateKey(booking.checkOut),
+      roomId: booking.bedId ? undefined : booking.roomId,
+      bedId: booking.bedId ?? undefined,
+      excludeBookingId: booking.id,
+    });
+    if (conflict) {
+      return NextResponse.json(
+        { error: "Номер уже занят другой бронью — отменить выселение нельзя" },
+        { status: 409 }
+      );
     }
 
     await prisma.$transaction([

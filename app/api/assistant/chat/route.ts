@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { assertSeatOps } from "@/lib/permissions";
+import { assertHotelAiEnabled } from "@/lib/ai-premium.server";
 import { runHamsterChat } from "@/lib/assistant/hamster-agent.server";
 import { runAssistantChat } from "@/lib/assistant/agent.server";
 import { apiErrorMessage } from "@/lib/api-error";
@@ -28,6 +29,10 @@ export async function POST(req: NextRequest) {
     const hotelId = body.hotelId ? String(body.hotelId) : "";
     let hotelName: string | null = null;
     if (hotelId && hotelId !== "all") {
+      const aiGate = await assertHotelAiEnabled(auth.session.seatId, hotelId);
+      if (!aiGate.ok) {
+        return NextResponse.json({ error: aiGate.error }, { status: aiGate.status });
+      }
       const hotel = await prisma.hotel.findFirst({
         where: { id: hotelId, seatId: auth.session.seatId },
         select: { name: true },

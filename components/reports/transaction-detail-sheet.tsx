@@ -117,7 +117,7 @@ export function TransactionDetailSheet({
   if (!tx) return null;
 
   const cancelled = isTransactionCancelled(tx);
-  const pmCfg = pmConfig[tx.paymentMethod] ?? { label: tx.paymentMethod, color: "#64748B", bg: "#F1F5F9", icon: "Banknote" };
+  const pmCfg = pmConfig[tx.paymentMethod] ?? { label: tx.paymentMethod, color: "hsl(var(--muted-foreground))", bg: "hsl(var(--secondary))", icon: "Banknote" };
   const isOut = txIsOutflow(tx);
   const amountColor = txAmountColor(tx, cancelled);
   const catLabel = categoryLabel(tx.category, transactionCategories);
@@ -287,7 +287,7 @@ export function TransactionDetailSheet({
                       className="flex-1 py-2.5 text-[12px] font-bold rounded-xl border transition-all disabled:opacity-50"
                       style={{
                         borderColor: direction === id ? (id === "income" ? "#10B981" : "#EF4444") : "hsl(var(--border))",
-                        background: direction === id ? (id === "income" ? "#ECFDF5" : "#FEF2F2") : undefined,
+                        background: direction === id ? (id === "income" ? "hsl(var(--success) / 0.1)" : "hsl(var(--destructive) / 0.1)") : undefined,
                         color: direction === id ? (id === "income" ? "#059669" : "#DC2626") : undefined,
                       }}
                     >
@@ -378,7 +378,7 @@ export function TransactionDetailSheet({
                 disabled={editBusy}
                 onClick={() => void saveEdit()}
                 className="w-full md:w-auto md:min-w-[140px] py-2.5 px-4 text-[13px] font-bold rounded-xl text-white hover:opacity-90 disabled:opacity-50"
-                style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+                style={{ background: "hsl(var(--primary))" }}
               >
                 {editBusy ? "Сохранение…" : "Сохранить"}
               </button>

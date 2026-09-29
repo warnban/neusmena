@@ -6,6 +6,7 @@ import {
   Home, PanelRightClose, Trash2,
 } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { useApp } from "@/components/providers/app-data";
 import { OrganizationFormModal } from "@/components/organizations/organization-form-modal";
 import { PaymentHistoryList } from "@/components/payments/payment-history-list";
@@ -265,7 +266,7 @@ export default function OrganizationsPage() {
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             {loading ? (
-              <p className="text-center text-[12px] text-muted-foreground py-8">Загрузка…</p>
+              <div className="p-3"><TableSkeleton rows={8} cols={2} /></div>
             ) : filtered.length === 0 ? (
               <p className="text-center text-[12px] text-muted-foreground py-8">Нет организаций</p>
             ) : (

@@ -30,7 +30,7 @@ export function resolveAppZone(host: string, pathname: string): AppZone {
   ) {
     return "crm";
   }
-  if (pathname === "/" || pathname.startsWith("/landing")) {
+  if (pathname === "/" || pathname.startsWith("/get-access") || pathname.startsWith("/landing")) {
     return "marketing";
   }
   return "crm";

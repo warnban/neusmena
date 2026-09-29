@@ -29,7 +29,7 @@ export type AvailableSlotRow = {
   placeStatus: RoomStatus;
 };
 
-async function hasBookingDateOverlap(params: {
+export async function hasBookingDateOverlap(params: {
   hotelId: string;
   checkIn: string;
   checkOut: string;
@@ -49,20 +49,31 @@ async function hasBookingDateOverlap(params: {
     ...(params.bedId ? { bedId: params.bedId } : { bedId: null, roomId: params.roomId }),
   };
 
+  // Для проверки блокировки от organization-stay нужен roomId. Если передан bedId,
+  // добираем roomId из bed (dorm-комната может быть занята организацией целиком).
+  let orgCheckRoomId = params.roomId ?? null;
+  if (params.bedId && !orgCheckRoomId) {
+    const bed = await prisma.bed.findUnique({
+      where: { id: params.bedId },
+      select: { roomId: true },
+    });
+    orgCheckRoomId = bed?.roomId ?? null;
+  }
+
   const [bookingHit, orgHit] = await Promise.all([
     prisma.booking.findFirst({ where: bookingWhere, select: { id: true } }),
-    params.bedId
-      ? Promise.resolve(null)
-      : prisma.organizationStayRoom.findFirst({
+    orgCheckRoomId
+      ? prisma.organizationStayRoom.findFirst({
           where: {
-            roomId: params.roomId,
+            roomId: orgCheckRoomId,
             status: "active",
             checkIn: { lt: checkOutDate },
             checkOut: { gt: checkInDate },
             organizationStay: { status: "active", hotelId: params.hotelId },
           },
           select: { id: true },
-        }),
+        })
+      : Promise.resolve(null),
   ]);
 
   return Boolean(bookingHit || orgHit);

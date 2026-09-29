@@ -115,20 +115,20 @@ export function CategoryBreakdownPanel({
                 borderColor:
                   direction === id
                     ? id === "income"
-                      ? "#10B981"
-                      : "#EF4444"
+                      ? "hsl(var(--success) / 0.5)"
+                      : "hsl(var(--destructive) / 0.5)"
                     : "hsl(var(--border))",
                 background:
                   direction === id
                     ? id === "income"
-                      ? "#ECFDF5"
-                      : "#FEF2F2"
+                      ? "hsl(var(--success) / 0.1)"
+                      : "hsl(var(--destructive) / 0.1)"
                     : undefined,
                 color:
                   direction === id
                     ? id === "income"
-                      ? "#059669"
-                      : "#DC2626"
+                      ? "hsl(var(--success))"
+                      : "hsl(var(--destructive))"
                     : undefined,
               }}
             >

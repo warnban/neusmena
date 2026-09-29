@@ -16,7 +16,7 @@ interface SessionInfo {
 }
 
 interface AppData {
-  seat: { id: string; name: string } | null;
+  seat: { id: string; name: string; plan?: string; premiumBadge?: boolean } | null;
   session: SessionInfo | null;
   hotels: Hotel[];
   staff: StaffMember[];
@@ -60,7 +60,17 @@ export function useApp() {
   return ctx;
 }
 
-export function AppDataProvider({ children }: { children: React.ReactNode }) {
+export function AppDataProvider({
+  children,
+  bootstrapUrl = "/api/bootstrap",
+  previewMode = false,
+  defaultHotelId,
+}: {
+  children: React.ReactNode;
+  bootstrapUrl?: string;
+  previewMode?: boolean;
+  defaultHotelId?: string | "all";
+}) {
   const [seat, setSeat] = useState<{ id: string; name: string } | null>(null);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [hotels, setHotels] = useState<Hotel[]>([]);
@@ -187,25 +197,37 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         : (data.currentUser as StaffMember)?.hotelIds ?? [];
 
     try {
-      const saved = localStorage.getItem("hotelId");
-      if (saved === "all" && data.canViewAllHotels) {
-        setHotelIdState("all");
-      } else if (saved && accessibleIds.includes(saved)) {
-        setHotelIdState(saved);
-      } else if (accessibleIds.length === 1) {
-        setHotelIdState(accessibleIds[0]);
-      } else if (data.canViewAllHotels) {
-        setHotelIdState("all");
-      } else if (accessibleIds[0]) {
-        setHotelIdState(accessibleIds[0]);
+      if (defaultHotelId) {
+        setHotelIdState(defaultHotelId);
+      } else {
+        const saved = localStorage.getItem("hotelId");
+        if (saved === "all" && data.canViewAllHotels) {
+          setHotelIdState("all");
+        } else if (saved && accessibleIds.includes(saved)) {
+          setHotelIdState(saved);
+        } else if (accessibleIds.length === 1) {
+          setHotelIdState(accessibleIds[0]);
+        } else if (data.canViewAllHotels) {
+          setHotelIdState("all");
+        } else if (accessibleIds[0]) {
+          setHotelIdState(accessibleIds[0]);
+        }
       }
     } catch {}
-  }, []);
+  }, [defaultHotelId]);
 
   const fetchBootstrap = useCallback(async () => {
-    const res = await fetch("/api/bootstrap", { cache: "no-store" });
+    const res = await fetch(bootstrapUrl, { cache: "no-store" });
     if (res.status === 401) {
-      window.location.href = "/login";
+      if (!previewMode) {
+        // Сброс cookie, иначе middleware снова отправит с /login на /dashboard (бесконечный цикл).
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+        } catch {
+          /* ignore */
+        }
+        window.location.replace("/login?session=expired");
+      }
       return null;
     }
     if (!res.ok) {
@@ -221,7 +243,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
     setLoadError(null);
     return res.json() as Promise<Record<string, unknown>>;
-  }, []);
+  }, [bootstrapUrl, previewMode]);
 
   const refreshSilent = useCallback(async () => {
     const data = await fetchBootstrap();

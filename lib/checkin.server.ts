@@ -20,6 +20,12 @@ import {
 import { buildAccommodationPaymentNote } from "@/lib/booking-transaction-notes";
 import { formatRuleLabel, hotelHasDiscountRules, validatePaymentDiscount } from "@/lib/hotel-discount-rules";
 import {
+  isSplitPayment,
+  newPaymentGroupId,
+  sanitizeSplitParts,
+  sumSplitParts,
+} from "@/lib/payment-split";
+import {
   bookingStayNights,
   firstUnpaidNightDateKey,
   nightsFromFirstUnpaidToPaidThrough,
@@ -119,12 +125,29 @@ export async function performCheckIn(
     return { ok: false, error: "Укажите сумму оплаты" };
   }
 
+  const splits = sanitizeSplitParts(input.paymentSplits);
+  const useSplit = !input.skipPayment && isSplitPayment(splits);
+
   let payNow = input.skipPayment ? 0 : Math.min(debt, paymentAmount);
   let appliedRuleId: string | null = null;
   let appliedPct = 0;
   let appliedPerNight = 0;
+  let paymentGroupId: string | null = null;
 
-  if (payNow > 0) {
+  if (useSplit) {
+    const total = sumSplitParts(splits);
+    if (total <= 0) {
+      return { ok: false, error: "Укажите суммы смежной оплаты" };
+    }
+    if (total > debt + 1) {
+      return { ok: false, error: "Сумма оплаты превышает задолженность" };
+    }
+    // При смежной оплате правило-скидка не применяется.
+    payNow = total;
+    appliedPct = useRules ? 0 : discountPercent;
+    appliedPerNight = useRules ? 0 : discountPerNight;
+    paymentGroupId = newPaymentGroupId();
+  } else if (payNow > 0) {
     const validation = validatePaymentDiscount({
       rules: discountRules,
       hotelId: booking.hotelId,
@@ -180,7 +203,7 @@ export async function performCheckIn(
   }
 
   let channelId: string | null = null;
-  if (paymentMethod === OTA_PAYMENT_CODE && payNow > 0) {
+  if (!useSplit && paymentMethod === OTA_PAYMENT_CODE && payNow > 0) {
     const raw = input.channelId ? String(input.channelId) : "";
     if (!raw) {
       return { ok: false, error: "Выберите канал OTA" };
@@ -233,7 +256,7 @@ export async function performCheckIn(
         amount: finalAmount,
         discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
         discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
-        paid: booking.paid + payNow,
+        ...(payNow > 0 ? { paid: { increment: payNow } } : {}),
         ...(channelId ? { channelId } : {}),
       },
     }),
@@ -254,7 +277,36 @@ export async function performCheckIn(
       : [prisma.room.update({ where: { id: booking.roomId }, data: { status: "occupied" } })]),
   ];
 
-  if (payNow > 0) {
+  if (payNow > 0 && useSplit) {
+    const baseNote = buildAccommodationPaymentNote(bookingForNote, payNow, {
+      paidBefore: booking.paid,
+      extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
+      userNote: input.note ?? null,
+    });
+    splits.forEach((part, i) => {
+      ops.push(
+        prisma.transaction.create({
+          data: {
+            hotelId: booking.hotelId,
+            type: "payment",
+            category: "accommodation",
+            paymentMethod: part.method,
+            amount: part.amount,
+            date: dateResolved.date,
+            bookingId: booking.id,
+            guestName: resolvedGuestName,
+            roomNumber: booking.room.number,
+            paymentNights,
+            discountRuleId: null,
+            discountPercentApplied: appliedPct,
+            discountPerNightApplied: appliedPerNight,
+            paymentGroupId,
+            note: `${baseNote}. Смежная оплата ${i + 1}/${splits.length}`,
+          },
+        })
+      );
+    });
+  } else if (payNow > 0) {
     ops.push(
       prisma.transaction.create({
         data: {

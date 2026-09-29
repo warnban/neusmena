@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { GUEST_DOC_MAX_BYTES, storeGuestDocument } from "@/lib/guest-document-storage.server";
 import { recognizeDocumentFromScan } from "@/lib/document-scan.server";
+import { assertGuestDocumentScanAllowed } from "@/lib/ai-premium.server";
 import { listFilledExtractFields } from "@/lib/document-scan-parse";
 import { apiErrorMessage } from "@/lib/api-error";
 import { fileServeUrl } from "@/lib/file-url";
@@ -33,6 +34,11 @@ export async function POST(
     });
     if (!guest) {
       return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
+    }
+
+    const aiCheck = await assertGuestDocumentScanAllowed(session.seatId, guest.id);
+    if (!aiCheck.ok) {
+      return NextResponse.json({ error: aiCheck.error }, { status: aiCheck.status });
     }
 
     if (!process.env.AITUNNEL_API_KEY?.trim()) {

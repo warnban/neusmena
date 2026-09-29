@@ -265,7 +265,7 @@ export function RelocateModal({ onClose }: { onClose: () => void }) {
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left border transition-all ${active ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:bg-muted/50"}`}
                   >
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ background: "linear-gradient(135deg,#EFF6FF,#DBEAFE)", color: "#2563EB" }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0 bg-secondary text-secondary-foreground border border-border">
                       {inits(b.guestName)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -374,7 +374,7 @@ export function RelocateModal({ onClose }: { onClose: () => void }) {
             onClick={submit}
             disabled={busy || !selectedBooking || !newRoomId || (isTargetDorm && !newBedId)}
             className="flex-1 py-2.5 text-[13px] font-bold rounded-xl text-white hover:opacity-90 disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,#8B5CF6,#7C3AED)" }}
+            style={{ background: "hsl(var(--primary))" }}
           >
             {busy ? "Переселение…" : "Переселить"}
           </button>

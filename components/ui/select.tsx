@@ -117,7 +117,7 @@ export function Select({
                     {opt.icon && (
                       <span
                         className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: opt.bg ?? "#F1F5F9" }}
+                        style={{ background: opt.bg ?? "hsl(var(--secondary))" }}
                       >
                         <Icon name={opt.icon} size={14} style={{ color: opt.color ?? "#64748B" }} />
                       </span>
@@ -152,7 +152,7 @@ export function Select({
         {selected?.icon && (
           <span
             className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
-            style={{ background: selected.bg ?? "#F1F5F9" }}
+            style={{ background: selected.bg ?? "hsl(var(--secondary))" }}
           >
             <Icon name={selected.icon} size={12} style={{ color: selected.color ?? "#64748B" }} />
           </span>

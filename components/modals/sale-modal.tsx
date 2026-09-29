@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { X, Plus, Minus, Check, ShoppingBag, Receipt } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
-import { Icon } from "@/components/icon";
 import { OperationDateField } from "@/components/ui/operation-date-field";
+import { PaymentMethodPicker, type PaymentSelection } from "@/components/payments/payment-method-picker";
+import { sumSplitParts } from "@/lib/payment-split";
 import { money } from "@/lib/format";
 import { mskDateKey } from "@/lib/msk-time";
 
@@ -16,7 +17,7 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
   const { services, expenses, pmConfig, hotels, hotelId, canManageSettings, refresh } = useApp();
   const [mode, setMode] = useState<Mode>("sale");
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [method, setMethod] = useState("cash");
+  const [paymentSel, setPaymentSel] = useState<PaymentSelection>({ mode: "single", method: "cash" });
   const [note, setNote] = useState("");
   const [operationDate, setOperationDate] = useState(() => mskDateKey());
   const [busy, setBusy] = useState(false);
@@ -36,7 +37,7 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
   }, [cart, catalog]);
 
   const total = cartDetails.reduce((s, c) => s + c.subtotal, 0);
-  const pmEntries = Object.entries(pmConfig);
+  const isSplit = paymentSel.mode === "split";
 
   function toggleItem(id: string) {
     setCart((prev) => {
@@ -82,6 +83,10 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
       setError("Выберите хотя бы одну позицию");
       return;
     }
+    if (isSplit && sumSplitParts(paymentSel.parts) !== total) {
+      setError("Распределите всю сумму по способам оплаты");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/sales", {
@@ -90,7 +95,8 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({
           hotelId: activeHotelId,
           kind: mode === "sale" ? "service" : "expense",
-          paymentMethod: method,
+          paymentMethod: paymentSel.mode === "single" ? paymentSel.method : paymentSel.parts[0]?.method,
+          splits: isSplit ? paymentSel.parts : undefined,
           items: cart,
           note: note.trim() || undefined,
           operationDate: canManageSettings ? operationDate : undefined,
@@ -187,7 +193,7 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
                   type="button"
                   onClick={() => toggleItem(svc.id)}
                   className="flex items-center gap-2 p-2.5 rounded-xl text-left bg-muted transition-all"
-                  style={{ border: `2px solid ${inCart ? "#3B82F6" : "hsl(var(--border))"}` }}
+                  style={{ border: `2px solid ${inCart ? "hsl(var(--primary))" : "hsl(var(--border))"}` }}
                 >
                   <span className="text-[16px]">{svc.icon}</span>
                   <div className="flex-1 min-w-0">
@@ -219,27 +225,13 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          <div>
-            <label className="text-[11px] font-bold text-muted-foreground block mb-2">Способ оплаты (касса)</label>
-            <div className="grid grid-cols-2 gap-2">
-              {pmEntries.map(([code, cfg]) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => setMethod(code)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all"
-                  style={{
-                    border: `2px solid ${method === code ? cfg.color : "hsl(var(--border))"}`,
-                    color: method === code ? cfg.color : undefined,
-                    background: method === code ? cfg.bg : undefined,
-                  }}
-                >
-                  <Icon name={cfg.icon} size={12} />
-                  <span className="text-[11px] font-semibold">{cfg.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <PaymentMethodPicker
+            pmConfig={pmConfig}
+            total={total}
+            value={paymentSel}
+            onChange={setPaymentSel}
+            label="Способ оплаты (касса)"
+          />
 
           {mode === "expense" && (
             <input
@@ -264,7 +256,7 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
             onClick={submit}
             disabled={busy || !cart.length}
             className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-            style={{ background: mode === "expense" ? "linear-gradient(135deg,#EF4444,#DC2626)" : "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+            style={{ background: mode === "expense" ? "hsl(var(--destructive))" : "hsl(var(--primary))" }}
           >
             {busy ? "Проведение…" : mode === "expense" ? "Списать расход" : "Оформить продажу"}
           </button>

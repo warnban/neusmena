@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Building2, Copy, Check, Link2, X, BedDouble } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { useApp } from "@/components/providers/app-data";
 import type { Hotel, StaffMember, UserRole } from "@/lib/types";
 import { PM_COLOR_PRESETS, colorToBg } from "@/lib/color-utils";
@@ -91,7 +92,7 @@ export default function SettingsPage() {
     return (
       <>
         <TopBar title="Настройки" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={8} cols={4} /></div>
       </>
     );
   }
@@ -147,15 +148,15 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <h3 className="text-[14px] font-bold text-foreground">Сотрудники</h3>
               {canManageSettings && (
-                <button onClick={() => { setInviteUrl(""); setShowInvite(true); setError(""); }} className="flex items-center gap-1.5 px-3.5 py-1.5 text-white text-[12px] font-bold rounded-lg" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+                <button onClick={() => { setInviteUrl(""); setShowInvite(true); setError(""); }} className="flex items-center gap-1.5 px-3.5 py-1.5 text-white text-[12px] font-bold rounded-lg" style={{ background: "hsl(var(--primary))" }}>
                   <Link2 size={13} />Пригласить
                 </button>
               )}
             </div>
 
             {canManageSettings && invites.length > 0 && (
-              <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl p-4 space-y-2">
-                <p className="text-[12px] font-bold text-[#92400E]">Активные приглашения</p>
+              <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-2">
+                <p className="text-[12px] font-semibold text-warning">Активные приглашения</p>
                 {invites.map((inv) => {
                   const url =
                     inv.url ||
@@ -186,13 +187,13 @@ export default function SettingsPage() {
                     <tr key={s.id} className="hover:bg-muted/50 border-b border-border/40">
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ background: "linear-gradient(135deg,#3B82F6,#6366F1)" }}>{s.initials}</div>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-secondary text-secondary-foreground text-[11px] font-semibold border border-border">{s.initials}</div>
                           <span className="text-[13px] font-semibold text-foreground">{s.name}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-[12px] text-foreground/80">{s.position}</td>
                       <td className="px-4 py-3.5">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.role === "owner" ? "bg-[#FEF3C7] text-[#D97706]" : s.role === "manager" ? "bg-success/10 text-success" : "bg-accent text-primary"}`}>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${s.role === "owner" ? "bg-warning/10 text-warning" : s.role === "manager" ? "bg-success/10 text-success" : "bg-accent text-accent-foreground"}`}>
                           {ROLE_LABELS[s.role]}
                         </span>
                       </td>
@@ -527,7 +528,7 @@ function FinanceSettings({
                     className="w-8 h-8 rounded-lg border-2 transition-transform hover:scale-105"
                     style={{
                       background: p.color,
-                      borderColor: newPmColor === p.color ? "#0F172A" : "transparent",
+                      borderColor: newPmColor === p.color ? "hsl(var(--foreground))" : "transparent",
                       boxShadow: newPmColor === p.color ? "0 0 0 2px white inset" : undefined,
                     }}
                   />
@@ -609,7 +610,7 @@ function FinanceSettings({
                     className="w-8 h-8 rounded-lg border-2 transition-transform hover:scale-105"
                     style={{
                       background: p.color,
-                      borderColor: newSourceColor === p.color ? "#0F172A" : "transparent",
+                      borderColor: newSourceColor === p.color ? "hsl(var(--foreground))" : "transparent",
                       boxShadow: newSourceColor === p.color ? "0 0 0 2px white inset" : undefined,
                     }}
                   />
@@ -733,7 +734,7 @@ function HotelEditor({ hotel, canEdit, onSaved }: { hotel: Hotel; canEdit: boole
       </div>
       {canEdit && (
         <div className="flex items-center gap-3">
-          <button disabled={busy} onClick={save} className="px-5 py-2.5 text-white text-[13px] font-bold rounded-xl shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+          <button disabled={busy} onClick={save} className="px-5 py-2.5 text-white text-[13px] font-bold rounded-xl shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
             {busy ? "Сохранение…" : "Сохранить"}
           </button>
           {msg && <span className="text-[12px] text-success font-semibold">{msg}</span>}
@@ -780,7 +781,7 @@ function AddHotelModal({ onClose, onCreated }: { onClose: () => void; onCreated:
           <input type="number" min={1} max={5} value={stars} onChange={(e) => setStars(Number(e.target.value) || 3)} className="w-20 px-3 py-2 text-[13px] rounded-xl border border-border bg-muted outline-none focus:ring-1 focus:ring-ring" />
         </div>
         {error && <p className="text-[12px] text-destructive">{error}</p>}
-        <button type="submit" disabled={busy} className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+        <button type="submit" disabled={busy} className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
           {busy ? "Создание…" : "Создать отель"}
         </button>
       </form>
@@ -849,7 +850,7 @@ function InviteStaffModal({
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@hotel.ru" className="w-full px-3 py-2 text-[13px] rounded-xl border border-border bg-muted outline-none focus:ring-1 focus:ring-ring" />
         </div>
         {error && <p className="text-[12px] text-destructive">{error}</p>}
-        <button type="submit" disabled={busy || !hotelIds.length} className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+        <button type="submit" disabled={busy || !hotelIds.length} className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
           {busy ? "Создание…" : "Создать ссылку"}
         </button>
       </form>
@@ -918,7 +919,7 @@ function EditStaffModal({
           </div>
         </div>
         {error && <p className="text-[12px] text-destructive">{error}</p>}
-        <button type="submit" disabled={busy || !hotelIds.length} className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+        <button type="submit" disabled={busy || !hotelIds.length} className="w-full py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
           {busy ? "Сохранение…" : "Сохранить"}
         </button>
       </form>

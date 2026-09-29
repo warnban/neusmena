@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, RefreshCw, FileText, Trash2, AlertTriangle } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
@@ -127,7 +128,7 @@ export default function ChannelsPage() {
     return (
       <>
         <TopBar title="Менеджер каналов (OTA)" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={6} cols={5} /></div>
       </>
     );
   }
@@ -154,7 +155,7 @@ export default function ChannelsPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <KpiCard label="Каналов" value={String(scopedChannels.length)} sub={`${totals.active} активных`} />
               <KpiCard label="Доход/мес" value={money(totals.revenue)} sub="по каналам" accent="#059669" />
-              <KpiCard label="Брон./мес" value={String(totals.bookings)} sub="OTA" accent="#2563EB" />
+              <KpiCard label="Брон./мес" value={String(totals.bookings)} sub="OTA" accent="hsl(var(--primary))" />
             </div>
 
             {/* Партнёры / каналы */}

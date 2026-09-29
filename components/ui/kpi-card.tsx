@@ -21,12 +21,12 @@ export function KpiCard({
 }) {
   const mx = spark ? Math.max(...spark, 1) : 1;
   return (
-    <div className="bg-card rounded-xl p-4 hover:shadow-md transition-shadow border border-border">
+    <div className="bg-card rounded-lg p-4 border border-border">
       <div className="flex items-start justify-between mb-3">
-        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">{label}</span>
+        <span className="eyebrow">{label}</span>
         {trend && (
           <span
-            className={`flex items-center gap-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+            className={`flex items-center gap-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-md ${
               trendDir === "up" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
             }`}
           >
@@ -34,7 +34,7 @@ export function KpiCard({
           </span>
         )}
       </div>
-      <div className="text-[26px] font-black leading-none mb-1" style={accent ? { color: accent } : undefined}>
+      <div className="font-display text-[24px] font-semibold leading-none mb-1 tabular" style={accent ? { color: accent } : undefined}>
         {value}
       </div>
       {sub && <div className="text-[11px] text-muted-foreground">{sub}</div>}

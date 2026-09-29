@@ -6,8 +6,8 @@ import { assertHotelWrite } from "@/lib/permissions";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
 import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import { calcStayAmount } from "@/lib/booking-pricing";
-import { guestGenderMatchesDorm, formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
-import { findAvailableRooms } from "@/lib/booking-availability.server";
+import { formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
+import { resolveRoomForBooking, hasBookingDateOverlap } from "@/lib/booking-availability.server";
 import {
   firstUnpaidNightDateKey,
   nightsFromFirstUnpaidToPaidThrough,
@@ -82,6 +82,9 @@ async function executeRecordPayment(
   if (!auth.ok) return { ok: false as const, error: auth.error };
 
   const booking = auth.booking;
+  if (booking.status === "cancelled" || booking.status === "checkedout") {
+    return { ok: false as const, error: "Нельзя принять оплату по отменённой или выселенной броне" };
+  }
   const payLock = await assertPaymentsOpen(booking.hotelId);
   if (!payLock.ok) return { ok: false as const, error: payLock.error };
 
@@ -196,7 +199,7 @@ async function executeRecordPayment(
     prisma.booking.update({
       where: { id: booking.id },
       data: {
-        paid: booking.paid + validation.expectedAmount,
+        paid: { increment: validation.expectedAmount },
         ...(channelId ? { channelId } : {}),
       },
     }),
@@ -232,6 +235,21 @@ async function executeExtendStay(session: SessionPayload, payload: Record<string
   }
   if (newCheckOutKey === prevCheckOutKey) {
     return { ok: false as const, error: "Выберите другую дату выезда" };
+  }
+
+  // Продление не должно перекрыться с последующей бронью или org-stay.
+  if (newCheckOutKey > prevCheckOutKey) {
+    const conflict = await hasBookingDateOverlap({
+      hotelId: booking.hotelId,
+      checkIn: checkInKey,
+      checkOut: newCheckOutKey,
+      roomId: booking.bedId ? undefined : booking.roomId,
+      bedId: booking.bedId ?? undefined,
+      excludeBookingId: booking.id,
+    });
+    if (conflict) {
+      return { ok: false as const, error: "На эти даты уже есть другая бронь или размещение организации" };
+    }
   }
 
   const newCheckOut = parseMskDateKey(newCheckOutKey);
@@ -310,7 +328,13 @@ async function executeRefund(
   if (quote.recalcNote) refundNote = `${refundNote}. ${quote.recalcNote}`;
   if (withholdNights > 0) refundNote = `${refundNote}. Удержание ${withholdNights} ноч.`;
 
-  await prisma.$transaction(async (tx) => {
+  const ok = await prisma.$transaction(async (tx) => {
+    const dec = await tx.booking.updateMany({
+      where: { id: ctx.booking.id, paid: { gte: amount } },
+      data: { paid: { decrement: amount } },
+    });
+    if (dec.count !== 1) throw new Error("REFUND_CONFLICT");
+
     const transaction = await tx.transaction.create({
       data: {
         hotelId,
@@ -323,11 +347,6 @@ async function executeRefund(
         roomNumber: ctx.roomNumber,
         note: refundNote,
       },
-    });
-
-    await tx.booking.update({
-      where: { id: ctx.booking.id },
-      data: { paid: Math.max(0, ctx.booking.paid - amount) },
     });
 
     await tx.refundRecord.create({
@@ -344,7 +363,18 @@ async function executeRefund(
         recalcNote: quote.recalcNote,
       },
     });
+    return true;
+  }).catch((e) => {
+    if (e instanceof Error && e.message === "REFUND_CONFLICT") return false;
+    throw e;
   });
+
+  if (!ok) {
+    return {
+      ok: false as const,
+      error: "Возврат отклонён: сумма превышает оплаченное (возможно, параллельный возврат уже прошёл)",
+    };
+  }
 
   return {
     ok: true as const,
@@ -354,7 +384,7 @@ async function executeRefund(
 
 async function executeCreateBooking(session: SessionPayload, payload: Record<string, unknown>) {
   const hotelId = String(payload.hotelId ?? "");
-  const roomId = String(payload.roomId ?? "");
+  const roomId = payload.roomId ? String(payload.roomId) : "";
   const guestName = String(payload.guestName ?? "").trim();
   const guestId = payload.guestId ? String(payload.guestId) : "";
   const checkIn = String(payload.checkIn).slice(0, 10);
@@ -367,11 +397,8 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
   const auth = await assertHotelWrite(session, hotelId);
   if (!auth.ok) return { ok: false as const, error: auth.error };
 
-  const room = await prisma.room.findFirst({ where: { id: roomId, hotelId } });
-  if (!room) return { ok: false as const, error: "Номер не найден" };
-
-  const checkInDate = new Date(checkIn);
-  const checkOutDate = new Date(checkOut);
+  const checkInDate = parseMskDateKey(checkIn);
+  const checkOutDate = parseMskDateKey(checkOut);
   if (checkOutDate <= checkInDate) {
     return { ok: false as const, error: "Дата выезда должна быть позже заезда" };
   }
@@ -410,41 +437,34 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
     });
   }
 
-  let bedId: string | null = bedIdRaw;
-  const checkInKey = mskDateKey(checkInDate);
-  const checkOutKey = mskDateKey(checkOutDate);
+  // Единая точка проверки доступности + подбора койки: те же инварианты,
+  // что и в обычном POST /api/bookings, включая overlap с organization-stays.
+  const resolve = await resolveRoomForBooking({
+    hotelId,
+    seatId: session.seatId!,
+    checkIn,
+    checkOut,
+    roomId: roomId || undefined,
+    bedId: bedIdRaw ?? undefined,
+    guestGender: guest.gender,
+    guestId: guest.id,
+    anyAvailable: !roomId && !bedIdRaw,
+  });
+  if (!resolve.ok) return { ok: false as const, error: resolve.error };
 
-  if (room.kind === "dorm") {
-    if (!guestGenderMatchesDorm(guest.gender, room.dormGender)) {
-      return { ok: false as const, error: "Пол гостя не подходит для общей комнаты" };
-    }
-    const available = await findAvailableRooms({
-      hotelId,
-      checkIn: checkInKey,
-      checkOut: checkOutKey,
-      guestGender: guest.gender,
-      kind: "dorm",
-      limit: 100,
-    });
-    if (!bedId) {
-      const auto = available.rooms.find((s) => s.roomId === roomId);
-      if (!auto?.bedId) return { ok: false as const, error: "Нет свободных койко-мест" };
-      bedId = auto.bedId;
-    } else if (!available.rooms.some((s) => s.bedId === bedId)) {
-      return { ok: false as const, error: "Койко-место недоступно" };
-    }
-  } else if (bedId) {
-    return { ok: false as const, error: "Койко-место только для общих комнат" };
-  }
-
-  const amount = payload.amount
-    ? Math.round(Number(payload.amount))
-    : calcStayAmount({ roomPrice: room.price, checkIn: checkInDate, checkOut: checkOutDate });
+  const room = resolve.room;
+  const bedId = resolve.bedId;
+  // amount ВСЕГДА пересчитывается через calcStayAmount — значение из LLM не доверяем.
+  const amount = calcStayAmount({
+    roomPrice: room.price,
+    checkIn: checkInDate,
+    checkOut: checkOutDate,
+  });
 
   const booking = await prisma.booking.create({
     data: {
       hotelId,
-      roomId,
+      roomId: room.id,
       bedId,
       guestId: guest.id,
       guestName: guest.name,
@@ -468,5 +488,6 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
   return {
     ok: true as const,
     message: `Бронь создана: ${guest.name}, №${place}, ${checkIn} — ${checkOut}.`,
+    bookingId: booking.id,
   };
 }

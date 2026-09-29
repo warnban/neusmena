@@ -6,10 +6,12 @@ import {
   assertCanManage,
   getManagerHotelIds,
   inviteRoleAllowed,
+  ROLE_LABELS,
   ROLE_POSITIONS,
 } from "@/lib/permissions";
 import type { UserRole } from "@prisma/client";
 import { resolvePublicOrigin, staffInviteUrl } from "@/lib/public-url.server";
+import { sendMail } from "@/lib/email.server";
 
 const INVITE_TTL_DAYS = 7;
 
@@ -100,8 +102,32 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  const seat = await prisma.seat.findUnique({
+    where: { id: check.session.seatId },
+    select: { name: true },
+  });
+  const seatLabel = seat?.name ?? "Смена";
+
   const origin = resolvePublicOrigin(req);
   const url = staffInviteUrl(origin, invite.token);
+
+  if (invite.email) {
+    await sendMail({
+      to: invite.email,
+      subject: `Приглашение в CRM «${seatLabel}»`,
+      text: [
+        "Вас пригласили в CRM Смена.",
+        "",
+        `Сеть: ${seatLabel}`,
+        `Роль: ${ROLE_LABELS[targetRole] ?? targetRole}`,
+        "",
+        "Зарегистрируйтесь по ссылке:",
+        url,
+        "",
+        `Ссылка действует до ${expiresAt.toLocaleDateString("ru-RU")}.`,
+      ].join("\n"),
+    });
+  }
 
   return NextResponse.json({ ok: true, invite, url });
 }

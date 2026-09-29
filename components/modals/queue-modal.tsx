@@ -78,7 +78,7 @@ export function QueueModal({
               const debtNights = due?.debtNights ?? 0;
               return (
                 <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/30">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ background: "#EFF6FF", color: "#2563EB" }}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0 bg-secondary text-secondary-foreground border border-border">
                     {inits(b.guestName)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -93,7 +93,7 @@ export function QueueModal({
                       <button
                         onClick={() => setCheckInBooking(b)}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-white text-[11px] font-bold rounded-lg hover:opacity-90"
-                        style={{ background: "linear-gradient(135deg,#10B981,#059669)" }}
+                        style={{ background: "hsl(var(--success))" }}
                       >
                         <UserCheck size={12} /> Заселить
                       </button>
@@ -102,7 +102,7 @@ export function QueueModal({
                         <button
                           onClick={() => { setStayChangeMode(false); setSelBooking(b); }}
                           className="flex items-center gap-1 px-2.5 py-1.5 text-white text-[11px] font-bold rounded-lg hover:opacity-90"
-                          style={{ background: "linear-gradient(135deg,#6366F1,#4F46E5)" }}
+                          style={{ background: "hsl(var(--primary))" }}
                         >
                           <LogOut size={12} /> Выселить
                         </button>
@@ -117,7 +117,7 @@ export function QueueModal({
                       <button
                         onClick={() => { setSelBooking(b); }}
                         className="flex items-center gap-1 px-2.5 py-1.5 text-white text-[11px] font-bold rounded-lg hover:opacity-90"
-                        style={{ background: "linear-gradient(135deg,#EF4444,#DC2626)" }}
+                        style={{ background: "hsl(var(--destructive))" }}
                       >
                         <CreditCard size={12} /> Оплата
                       </button>

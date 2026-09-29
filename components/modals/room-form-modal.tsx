@@ -302,7 +302,7 @@ export function RoomFormModal({ room, defaultHotelId, onClose }: Props) {
             )}
             <div className="flex-1" />
             <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-bold rounded-xl border border-border text-muted-foreground hover:bg-muted">Отмена</button>
-            <button type="submit" disabled={busy} className="px-4 py-2 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+            <button type="submit" disabled={busy} className="px-4 py-2 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
               {busy ? "Сохранение…" : isEdit ? "Сохранить" : "Добавить"}
             </button>
           </div>

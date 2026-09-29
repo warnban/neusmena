@@ -46,6 +46,10 @@ export function resolvePublicOrigin(req?: NextRequest): string {
   return "http://localhost:3000";
 }
 
+export function crmPublicOrigin(): string {
+  return resolvePublicOrigin();
+}
+
 export function staffInviteUrl(origin: string, token: string): string {
   return `${origin.replace(/\/$/, "")}/register/staff?token=${encodeURIComponent(token)}`;
 }

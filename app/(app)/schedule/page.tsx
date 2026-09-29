@@ -6,6 +6,7 @@ import {
   LayoutGrid, Users, Check, Loader2,
 } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { useApp } from "@/components/providers/app-data";
 import { fmtDate, inits } from "@/lib/format";
 import {
@@ -179,7 +180,7 @@ export default function SchedulePage() {
     return (
       <>
         <TopBar title="График работы" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={8} cols={6} /></div>
       </>
     );
   }

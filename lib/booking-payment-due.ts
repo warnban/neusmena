@@ -5,7 +5,7 @@ import type { Transaction } from "@/lib/types";
 
 type AccommodationTx = Pick<
   Transaction,
-  "bookingId" | "type" | "category" | "amount" | "cancelledAt" | "paymentNights" | "paymentMethod" | "discountPercentApplied" | "discountPerNightApplied" | "discountRuleId"
+  "bookingId" | "type" | "category" | "amount" | "cancelledAt" | "paymentNights" | "paymentMethod" | "discountPercentApplied" | "discountPerNightApplied" | "discountRuleId" | "paymentGroupId"
 >;
 
 export function accommodationPaymentTransactions(
@@ -36,7 +36,9 @@ export function accommodationRefundNights(
   return 0;
 }
 
-/** Ночей предоплаты по транзакциям (paymentNights) или по сумме/тарифу. */
+/** Ночей предоплаты по транзакциям (paymentNights) или по сумме/тарифу.
+ *  Смежные (split) платежи объединяются в одну «оплату» по paymentGroupId,
+ *  чтобы одинаковый paymentNights у N частей не считался N раз. */
 export function prepaidNightsFromTransactions(
   booking: Booking,
   transactions?: AccommodationTx[],
@@ -46,7 +48,18 @@ export function prepaidNightsFromTransactions(
   if (!payments.length) return null;
   const hasExplicit = payments.some((p) => p.paymentNights != null && p.paymentNights > 0);
   if (!hasExplicit) return null;
-  const paidNights = payments.reduce((s, p) => s + (p.paymentNights ?? 0), 0);
+
+  const seenGroups = new Set<string>();
+  let paidNights = 0;
+  for (const p of payments) {
+    const n = p.paymentNights ?? 0;
+    if (n <= 0) continue;
+    if (p.paymentGroupId) {
+      if (seenGroups.has(p.paymentGroupId)) continue;
+      seenGroups.add(p.paymentGroupId);
+    }
+    paidNights += n;
+  }
   const maxNights = bookingStayNights(booking);
   return Math.min(maxNights, Math.max(0, paidNights - refundNights));
 }

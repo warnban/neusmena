@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard, Building2, Users, LogOut, Shield,
+  LayoutDashboard, Building2, Users, LogOut, Shield, ClipboardList,
 } from "lucide-react";
 
 const NAV = [
   { href: "/platform", label: "Обзор", icon: LayoutDashboard, exact: true },
+  { href: "/platform/orders", label: "Заявки", icon: ClipboardList },
   { href: "/platform/seats", label: "Сети и отели", icon: Building2 },
   { href: "/platform/users", label: "Пользователи", icon: Users },
 ];

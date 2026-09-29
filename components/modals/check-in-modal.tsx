@@ -214,7 +214,7 @@ export function CheckInModal({
                   )}
                 </div>
               </div>
-              <div className="flex items-start gap-2 p-3 rounded-xl text-[11px] bg-[#FFFBEB] border border-[#FDE68A] text-[#92400E]">
+              <div className="flex items-start gap-2 p-3 rounded-lg text-[11px] bg-warning/10 border border-warning/30 text-warning">
                 <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
                 Гостиница обязана направить уведомление в МВД в течение 1 рабочего дня (ФЗ №109-ФЗ).
               </div>
@@ -255,7 +255,7 @@ export function CheckInModal({
             <button
               onClick={() => setSigned(true)}
               className="flex items-center gap-2 px-4 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,#10B981,#059669)" }}
+              style={{ background: "hsl(var(--success))" }}
             >
               <Check size={14} /> Подтвердить подписание карточки
             </button>
@@ -265,7 +265,7 @@ export function CheckInModal({
               onClick={proceedToPrint}
               disabled={busy}
               className="flex items-center gap-2 px-4 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+              style={{ background: "hsl(var(--primary))" }}
             >
               <UserCheck size={14} /> {busy ? "Сохранение…" : "Заселить"}
             </button>

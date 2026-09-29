@@ -29,6 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       channelId: body.channelId,
       date: body.date,
       operationDate: body.operationDate,
+      paymentSplits: body.paymentSplits,
     });
 
     if (!result.ok) {

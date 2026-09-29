@@ -23,16 +23,42 @@ export async function PATCH(
   if (!guest) return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
 
   const body = await req.json();
-  const { form, regCardSigned, vip, isForeigner: isForeignerPatch, bookingId } = body as {
+  const { form, regCardSigned, vip, isForeigner: isForeignerPatch, bookingId, flagged, blacklisted, flagReason } = body as {
     form?: GuestFormData;
     regCardSigned?: boolean;
     vip?: boolean;
     isForeigner?: boolean;
     bookingId?: string;
+    flagged?: boolean;
+    blacklisted?: boolean;
+    flagReason?: string;
   };
 
+  const markerFields = {
+    ...(flagged !== undefined ? { flagged } : {}),
+    ...(blacklisted !== undefined ? { blacklisted } : {}),
+    ...(flagReason !== undefined ? { flagReason: String(flagReason).slice(0, 500) } : {}),
+  };
+
+  // Обновление только маркеров (чёрный список / проблемный гость) без полной формы.
   if (!form) {
-    return NextResponse.json({ error: "Нет данных формы" }, { status: 400 });
+    if (
+      vip === undefined &&
+      regCardSigned === undefined &&
+      Object.keys(markerFields).length === 0
+    ) {
+      return NextResponse.json({ error: "Нет данных формы" }, { status: 400 });
+    }
+    const updated = await prisma.guest.update({
+      where: { id: guest.id },
+      data: {
+        ...(vip !== undefined ? { vip } : {}),
+        ...(regCardSigned !== undefined ? { regCardSigned } : {}),
+        ...markerFields,
+      },
+      include: { documents: true },
+    });
+    return NextResponse.json({ ok: true, guest: updated });
   }
 
   const payload = guestUpdatePayload(form, isForeignerPatch ?? guest.isForeigner);
@@ -47,6 +73,7 @@ export async function PATCH(
         ...(isForeignerPatch !== undefined ? { isForeigner: isForeignerPatch } : {}),
         ...(regCardSigned !== undefined ? { regCardSigned } : {}),
         ...(vip !== undefined ? { vip } : {}),
+        ...markerFields,
         visa: payload.visa ? payload.visa : Prisma.JsonNull,
         migrationCard: payload.migrationCard ? payload.migrationCard : Prisma.JsonNull,
       },

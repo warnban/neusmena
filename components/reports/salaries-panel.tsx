@@ -339,7 +339,7 @@ export function SalariesPanel() {
                 <button disabled={busy || !payStaffId || !payAmount} onClick={() => paySalary({ staffId: payStaffId, amount: Math.round(Number(payAmount)) })} className="px-4 py-2 text-white text-[12px] font-bold rounded-xl bg-primary hover:opacity-90 disabled:opacity-50">
                   Выплатить зарплату
                 </button>
-                <button disabled={busy || totalBalance <= 0} onClick={() => paySalary({ payAll: true })} className="px-4 py-2 text-white text-[12px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#10B981,#059669)" }}>
+                <button disabled={busy || totalBalance <= 0} onClick={() => paySalary({ payAll: true })} className="px-4 py-2 text-white text-[12px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--success))" }}>
                   <Users size={13} className="inline mr-1" />
                   Выплатить всем ({money(totalBalance)})
                 </button>
@@ -431,7 +431,7 @@ export function SalariesPanel() {
                   <Select size="sm" value={payMethod} onChange={setPayMethod} options={pmEntries.map(([value, cfg]) => ({ value, label: cfg.label, icon: cfg.icon, color: cfg.color, bg: cfg.bg }))} />
                   <input value={payNote} onChange={(e) => setPayNote(e.target.value)} placeholder="Комментарий" className="px-3 py-2 text-[12px] rounded-xl border border-border bg-muted" />
                 </div>
-                <button disabled={busy || bonusTotal <= 0 || bonusDraft.status === "paid"} onClick={() => void payBonus()} className="px-5 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#8B5CF6,#6D28D9)" }}>
+                <button disabled={busy || bonusTotal <= 0 || bonusDraft.status === "paid"} onClick={() => void payBonus()} className="px-5 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
                   Выплатить премию
                 </button>
               </div>

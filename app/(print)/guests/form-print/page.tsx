@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import "./print.css";
+import "../../docx-print.css";
 
 export const metadata: Metadata = {
   title: "Печать бланка",

@@ -263,8 +263,8 @@ export function BookingGridView() {
                     <div key={i} style={{ position: "absolute", left: i * GC_W, width: GC_W, top: 0, height: GH_H, background: isToday ? "rgba(59,130,246,0.1)" : isWeekend ? "hsl(var(--muted))" : undefined, borderRight: "1px solid hsl(var(--border))" }}>
                       {isMonthStart && <div className="absolute left-1 top-1 text-[9px] font-bold text-muted-foreground whitespace-nowrap">{dt.toLocaleDateString("ru-RU", { month: "short", year: "2-digit" })}</div>}
                       <div className="absolute bottom-1 left-0 right-0 flex flex-col items-center">
-                        <div style={{ fontSize: 9, fontWeight: 700, color: isToday ? "#2563EB" : isWeekend ? "#EF4444" : undefined }}>{["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][dt.getDay()]}</div>
-                        <div style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.1, color: isToday ? "#2563EB" : undefined }}>{dt.getDate()}</div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: isToday ? "hsl(var(--primary))" : isWeekend ? "hsl(var(--destructive))" : undefined }}>{["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][dt.getDay()]}</div>
+                        <div style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.1, color: isToday ? "hsl(var(--primary))" : undefined }}>{dt.getDate()}</div>
                       </div>
                       {isToday && (
                         <div style={{ position: "absolute", bottom: 0, left: `${timeFrac * 100}%`, transform: "translateX(-50%)" }}>

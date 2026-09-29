@@ -1,6 +1,7 @@
 import type { Bed, Booking, Room, Transaction } from "@/lib/types";
 import { calcMonthStats } from "@/lib/reporting";
 import { mskDateKey, parseMskDateKey } from "@/lib/msk-time";
+import { isTransactionRecognized, revenueAmount } from "@/lib/finance";
 import type { KpiMetric } from "@prisma/client";
 
 export const KPI_METRIC_LABELS: Record<KpiMetric, string> = {
@@ -42,13 +43,18 @@ export function buildKpiSnapshot(
   beds: Bed[] = []
 ): KpiSnapshot {
   const stats = calcMonthStats(transactions, bookings, rooms, year, month, beds);
+  // cash_revenue: только признанные наличные доходные транзакции месяца.
+  // isTransactionRecognized отсекает cancelled + OTA-проживание до выселения;
+  // revenueAmount отсекает expense/encashment/refund/cancelled.
   const cashRevenue = transactions
     .filter((t) => {
+      if (t.paymentMethod !== "cash") return false;
+      if (!isTransactionRecognized(t, bookings)) return false;
       const key = mskDateKey(t.date);
       const d = parseMskDateKey(key);
-      return d.getUTCFullYear() === year && d.getUTCMonth() === month && t.paymentMethod === "cash" && t.type !== "expense" && t.type !== "encashment" && t.type !== "refund";
+      return d.getUTCFullYear() === year && d.getUTCMonth() === month;
     })
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + revenueAmount(t), 0);
 
   return {
     revpar: Math.round(stats.revpar),

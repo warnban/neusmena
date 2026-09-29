@@ -22,6 +22,9 @@ export function GuestEditModal({
   const [effectiveForeigner, setEffectiveForeigner] = useState(guest.isForeigner);
   const [scanBusy, setScanBusy] = useState(false);
   const [vip, setVip] = useState(guest.vip);
+  const [flagged, setFlagged] = useState(guest.flagged);
+  const [blacklisted, setBlacklisted] = useState(guest.blacklisted);
+  const [flagReason, setFlagReason] = useState(guest.flagReason ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,7 +41,7 @@ export function GuestEditModal({
       const res = await fetch(`/api/guests/${guest.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ form, vip, isForeigner: effectiveForeigner }),
+        body: JSON.stringify({ form, vip, isForeigner: effectiveForeigner, flagged, blacklisted, flagReason: flagReason.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -60,10 +63,36 @@ export function GuestEditModal({
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-          <label className="flex items-center gap-2 mb-4 text-[12px] font-semibold cursor-pointer">
-            <input type="checkbox" checked={vip} onChange={(e) => setVip(e.target.checked)} />
-            VIP-гость
-          </label>
+          <div className="mb-4 space-y-2.5">
+            <label className="flex items-center gap-2 text-[12px] font-semibold cursor-pointer">
+              <input type="checkbox" checked={vip} onChange={(e) => setVip(e.target.checked)} />
+              VIP-гость
+            </label>
+            <label className="flex items-center gap-2 text-[12px] font-semibold cursor-pointer text-warning">
+              <input
+                type="checkbox"
+                checked={flagged}
+                onChange={(e) => setFlagged(e.target.checked)}
+              />
+              Проблемный гость
+            </label>
+            <label className="flex items-center gap-2 text-[12px] font-semibold cursor-pointer text-destructive">
+              <input
+                type="checkbox"
+                checked={blacklisted}
+                onChange={(e) => setBlacklisted(e.target.checked)}
+              />
+              Чёрный список
+            </label>
+            {(flagged || blacklisted) && (
+              <input
+                value={flagReason}
+                onChange={(e) => setFlagReason(e.target.value)}
+                placeholder="Причина / комментарий (виден при создании брони)"
+                className="w-full px-3 py-2 text-[12px] rounded-xl border border-border bg-muted text-foreground outline-none focus:ring-1 focus:ring-ring"
+              />
+            )}
+          </div>
           <DocumentScanUpload
             guestId={guest.id}
             guestIsForeigner={effectiveForeigner}
@@ -94,7 +123,7 @@ export function GuestEditModal({
             onClick={save}
             disabled={busy}
             className="flex items-center gap-2 px-4 py-2 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+            style={{ background: "hsl(var(--primary))" }}
           >
             <Save size={14} /> {busy ? "Сохранение…" : "Сохранить"}
           </button>

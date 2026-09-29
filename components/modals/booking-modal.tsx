@@ -18,6 +18,7 @@ import { Select } from "@/components/ui/select";
 import { BookingPaymentForm } from "@/components/bookings/booking-payment-form";
 import { mskDateKey, mskDayAfter, mskNightDiff } from "@/lib/msk-time";
 import { PaymentHistoryList } from "@/components/payments/payment-history-list";
+import { GuestFlagBadges, GuestFlagWarning } from "@/components/guests/guest-flags";
 import { filterBookingTransactions, filterGuestTransactions } from "@/lib/guest-payments";
 import { StayAmendmentPrintModal } from "@/components/modals/stay-amendment-print-modal";
 import type { StayAmendmentPrevious } from "@/lib/guest-print-forms";
@@ -202,22 +203,24 @@ export function BookingModal({
               <div className="p-6 space-y-4">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Гость</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-[14px] font-bold" style={{ background: "linear-gradient(135deg,#EFF6FF,#DBEAFE)", color: "#2563EB" }}>{inits(live.guestName)}</div>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-[14px] font-semibold bg-secondary text-secondary-foreground border border-border">{inits(live.guestName)}</div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[14px] font-bold text-foreground">{live.guestName}</span>
-                      {guest?.vip && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "#FEF3C7", color: "#D97706" }}>VIP</span>}
+                      {guest?.vip && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "hsl(var(--vip) / 0.14)", color: "hsl(var(--vip))" }}>VIP</span>}
+                      {guest && <GuestFlagBadges guest={guest} className="inline-flex items-center gap-1.5 flex-wrap" />}
                     </div>
                     <div className="text-[11px] text-muted-foreground">{guest?.visits} визит · {guest?.country}</div>
                   </div>
                 </div>
+                {guest && <GuestFlagWarning guest={guest} />}
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2 text-[12px] text-foreground/80"><Phone size={12} className="text-muted-foreground" />{guest?.phone}</div>
                   <div className="flex items-center gap-2 text-[12px] text-foreground/80"><Mail size={12} className="text-muted-foreground" />{guest?.email}</div>
                 </div>
                 {guest?.preferences && (
-                  <div className="p-3 rounded-xl flex gap-2 text-[12px]" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
-                    <Star size={12} className="text-[#D97706] mt-0.5 flex-shrink-0" /><span style={{ color: "#92400E" }}>{guest.preferences}</span>
+                  <div className="p-3 rounded-lg flex gap-2 text-[12px] bg-warning/10 border border-warning/30">
+                    <Star size={12} className="text-warning mt-0.5 flex-shrink-0" /><span className="text-warning">{guest.preferences}</span>
                   </div>
                 )}
               </div>
@@ -308,13 +311,13 @@ export function BookingModal({
 
         <div className="px-6 py-3.5 flex flex-wrap items-center gap-2 border-t border-border bg-muted/40 rounded-b-2xl">
           {live.status !== "checkedin" && live.status !== "checkedout" && live.status !== "cancelled" && (
-            <button onClick={() => setCheckInOpen(true)} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[12px] font-bold rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#10B981,#059669)" }}>
+            <button onClick={() => setCheckInOpen(true)} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[12px] font-bold rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--success))" }}>
               <UserCheck size={13} /> Заселить
             </button>
           )}
           {live.status === "checkedin" && (
             <>
-              <button onClick={() => call(`/api/bookings/${live.id}/checkout`)} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[12px] font-bold rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+              <button onClick={() => call(`/api/bookings/${live.id}/checkout`)} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[12px] font-bold rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
                 <LogOut size={13} /> Выселить
               </button>
               <button onClick={() => setStayChangeOpen((v) => !v)} className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg border border-primary text-primary hover:bg-accent">
@@ -326,14 +329,13 @@ export function BookingModal({
             <button
               onClick={() => call(`/api/bookings/${live.id}/undo-checkout`)}
               disabled={busy}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg"
-              style={{ color: "#2563EB", background: "#EFF6FF", border: "1px solid #BFDBFE" }}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-md text-accent-foreground bg-accent border border-border"
             >
               <X size={13} /> Отменить выселение
             </button>
           )}
           {canCancelBooking && (
-            <button onClick={() => call(`/api/bookings/${live.id}/status`, { status: "cancelled" })} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg" style={{ color: "#DC2626", background: "#FEF2F2", border: "1px solid #FECACA" }}>
+            <button onClick={() => call(`/api/bookings/${live.id}/status`, { status: "cancelled" })} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-semibold rounded-md text-destructive bg-destructive/10 border border-destructive/30 hover:bg-destructive/15 transition-colors">
               <X size={13} /> Отменить бронирование
             </button>
           )}

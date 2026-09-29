@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, X } from "lucide-react";
 import { Icon } from "@/components/icon";
 import { HotelSwitcher } from "@/components/shell/hotel-switcher";
+import { SeatNetworkLabel } from "@/components/shell/seat-network-label";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { useApp } from "@/components/providers/app-data";
 import { isNavActive, mobileMoreNavItems } from "@/lib/nav";
@@ -13,10 +14,10 @@ import { useEffect, useState } from "react";
 export function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, seat } = useApp();
+  const { currentUser, seat, canManageSettings } = useApp();
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const items = mobileMoreNavItems();
+  const items = mobileMoreNavItems().filter((i) => !i.managerOnly || canManageSettings);
 
   useEffect(() => {
     if (!open) return;
@@ -98,15 +99,18 @@ export function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () 
           <div className="px-5 py-4 border-t border-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
-                  style={{ background: "linear-gradient(135deg,#3B82F6,#6366F1)" }}
-                >
+                <div className="w-9 h-9 rounded-full flex items-center justify-center bg-secondary text-secondary-foreground text-[11px] font-semibold flex-shrink-0 border border-border">
                   {currentUser?.initials ?? "—"}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[13px] font-bold text-foreground truncate">{currentUser?.name ?? "—"}</div>
-                  <div className="text-[11px] text-muted-foreground truncate">{seat?.name ?? currentUser?.position}</div>
+                  <div className="text-[13px] font-semibold text-foreground truncate">{currentUser?.name ?? "—"}</div>
+                  <div className="text-[11px] text-muted-foreground truncate">
+                    {seat?.name ? (
+                      <SeatNetworkLabel name={seat.name} premium={seat.premiumBadge} />
+                    ) : (
+                      currentUser?.position
+                    )}
+                  </div>
                 </div>
               </div>
               <ThemeToggle />
@@ -118,14 +122,6 @@ export function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () 
           className="flex-shrink-0 border-t border-border px-4 pt-3 space-y-2 bg-card"
           style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0.75rem)" }}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3 text-[14px] font-bold rounded-xl bg-muted text-foreground hover:bg-muted/80 transition-colors"
-          >
-            Закрыть
-          </button>
-
           {confirmLogout ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 space-y-2">
               <p className="text-[12px] font-semibold text-foreground text-center">
@@ -150,14 +146,23 @@ export function MobileMoreSheet({ open, onClose }: { open: boolean; onClose: () 
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmLogout(true)}
-              className="w-full flex items-center justify-center gap-1.5 py-2 text-[12px] font-semibold text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <LogOut size={14} />
-              Выйти из аккаунта
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmLogout(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-3 text-[14px] font-bold rounded-xl bg-muted text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <LogOut size={16} />
+                Выйти
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-3 text-[14px] font-bold rounded-xl bg-muted text-foreground hover:bg-muted/80 transition-colors"
+              >
+                Закрыть
+              </button>
+            </div>
           )}
         </div>
       </div>

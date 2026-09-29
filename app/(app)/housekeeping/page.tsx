@@ -3,6 +3,7 @@
 import { useMemo, useRef } from "react";
 import { Printer } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { useApp } from "@/components/providers/app-data";
 import { HK_CATEGORY_LABELS, HK_DONE_VISIBLE_HOURS, formatHkDoneAge, isHkDoneVisible } from "@/lib/housekeeping";
@@ -10,15 +11,15 @@ import type { HkTask, HkTaskCategory, HkTaskStatus } from "@/lib/types";
 import { fmtDate } from "@/lib/format";
 
 const HK_COLS: [HkTaskStatus, string, string, string][] = [
-  ["pending", "Ожидает", "#64748B", "#F8FAFC"],
-  ["in_progress", "В работе", "#D97706", "#FFFBEB"],
-  ["done", "Готово", "#059669", "#F0FDF4"],
+  ["pending", "Ожидает", "hsl(var(--muted-foreground))", "hsl(var(--muted-foreground) / 0.12)"],
+  ["in_progress", "В работе", "hsl(var(--warning))", "hsl(var(--warning) / 0.12)"],
+  ["done", "Готово", "hsl(var(--success))", "hsl(var(--success) / 0.12)"],
 ];
 
 const CATEGORY_STYLE: Record<HkTaskCategory, { bg: string; text: string; border: string }> = {
-  checkout: { bg: "#EFF6FF", text: "#2563EB", border: "#BFDBFE" },
-  relocation: { bg: "#F5F3FF", text: "#7C3AED", border: "#DDD6FE" },
-  scheduled: { bg: "#F0FDF4", text: "#059669", border: "#A7F3D0" },
+  checkout: { bg: "hsl(var(--primary) / 0.12)", text: "hsl(var(--primary))", border: "hsl(var(--primary) / 0.3)" },
+  relocation: { bg: "hsl(var(--muted-foreground) / 0.12)", text: "hsl(var(--muted-foreground))", border: "hsl(var(--muted-foreground) / 0.3)" },
+  scheduled: { bg: "hsl(var(--success) / 0.12)", text: "hsl(var(--success))", border: "hsl(var(--success) / 0.3)" },
 };
 
 const PRINT_ORDER: HkTaskCategory[] = ["checkout", "relocation", "scheduled"];
@@ -77,7 +78,7 @@ export default function HousekeepingPage() {
     return (
       <>
         <TopBar title="Уборка номеров" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={8} cols={5} /></div>
       </>
     );
   }

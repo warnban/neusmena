@@ -88,7 +88,7 @@ export function SalarySettingsEditor({ hotels, canEdit }: { hotels: Hotel[]; can
             disabled={busy}
             onClick={() => void save()}
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-white text-[12px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
-            style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+            style={{ background: "hsl(var(--primary))" }}
           >
             <Save size={14} /> {busy ? "…" : "Сохранить"}
           </button>

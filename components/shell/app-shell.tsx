@@ -2,6 +2,7 @@
 
 import { Sidebar } from "@/components/shell/sidebar";
 import { BottomNav } from "@/components/shell/bottom-nav";
+import { CommandPalette } from "@/components/shell/command-palette";
 import { LoadErrorBanner } from "@/components/shell/load-error-banner";
 import { HamsterCopilotShell } from "@/components/hamster/hamster-copilot-shell";
 import { useHamsterMode } from "@/components/providers/hamster-mode";
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <BottomNav />
+      <CommandPalette />
     </>
   );
 }

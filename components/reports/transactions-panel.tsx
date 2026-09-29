@@ -219,7 +219,7 @@ export function TransactionsPanel({
 
   function renderTxRow(t: Transaction, compact: boolean) {
     const cancelled = isTransactionCancelled(t);
-    const pmCfg = pmConfig[t.paymentMethod] ?? { label: t.paymentMethod, color: "#64748B", bg: "#F1F5F9", icon: "Banknote" };
+    const pmCfg = pmConfig[t.paymentMethod] ?? { label: t.paymentMethod, color: "hsl(var(--muted-foreground))", bg: "hsl(var(--secondary))", icon: "Banknote" };
     const isOut = txIsOutflow(t);
     const amountColor = txAmountColor(t, cancelled);
     const time = t.date.toLocaleTimeString("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" });
@@ -294,7 +294,7 @@ export function TransactionsPanel({
             type="button"
             onClick={() => setShowCreate(true)}
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+            style={{ background: "hsl(var(--primary))" }}
           >
             <Plus size={15} /> Новая транзакция
           </button>
@@ -324,9 +324,9 @@ export function TransactionsPanel({
                 onClick={() => setFilter((f) => ({ ...f, direction: id }))}
                 className="px-3 py-1.5 text-[12px] font-bold rounded-lg border transition-all"
                 style={{
-                  borderColor: filter.direction === id ? (id === "income" ? "#10B981" : id === "expense" ? "#EF4444" : "#3B82F6") : "hsl(var(--border))",
-                  background: filter.direction === id ? (id === "income" ? "#ECFDF5" : id === "expense" ? "#FEF2F2" : "#EFF6FF") : undefined,
-                  color: filter.direction === id ? (id === "income" ? "#059669" : id === "expense" ? "#DC2626" : "#2563EB") : undefined,
+                  borderColor: filter.direction === id ? (id === "income" ? "hsl(var(--success))" : id === "expense" ? "hsl(var(--destructive))" : "hsl(var(--primary))") : "hsl(var(--border))",
+                  background: filter.direction === id ? (id === "income" ? "hsl(var(--success) / 0.1)" : id === "expense" ? "hsl(var(--destructive) / 0.1)" : "hsl(var(--accent))") : undefined,
+                  color: filter.direction === id ? (id === "income" ? "hsl(var(--success))" : id === "expense" ? "hsl(var(--destructive))" : "hsl(var(--primary))") : undefined,
                 }}
               >
                 {label}

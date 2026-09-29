@@ -6,9 +6,24 @@ import {
   PLATFORM_DEV_COOKIE,
   verifyPlatformDevToken,
 } from "@/lib/platform-dev-token";
+import { resolveAppZone } from "@/lib/host-routing";
 
-const CRM_PUBLIC = ["/login", "/register"];
-const CRM_PUBLIC_API = ["/api/auth/login", "/api/auth/register", "/api/auth/logout", "/api/health"];
+const CRM_PUBLIC_API = [
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/health",
+  "/api/access/orders",
+  "/api/auth/register/staff",
+  "/api/auth/verify-email",
+];
+function isPublicCrmPage(pathname: string): boolean {
+  if (pathname === "/login") return true;
+  if (pathname.startsWith("/get-access")) return true;
+  if (pathname.startsWith("/verify-email")) return true;
+  if (pathname.startsWith("/register/staff")) return true;
+  return false;
+}
+const LANDING_PUBLIC_API = ["/api/landing/bootstrap"];
 const PLATFORM_PUBLIC = ["/platform/login"];
 const PLATFORM_PUBLIC_API = ["/api/platform/auth/login", "/api/platform/auth/logout"];
 
@@ -20,6 +35,7 @@ function isCrmAppPath(pathname: string): boolean {
   return (
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/grid") ||
+    pathname.startsWith("/tasks") ||
     pathname.startsWith("/guests") ||
     pathname.startsWith("/bookings") ||
     pathname.startsWith("/rooms") ||
@@ -31,6 +47,8 @@ function isCrmAppPath(pathname: string): boolean {
     pathname.startsWith("/schedule") ||
     pathname.startsWith("/organizations") ||
     pathname.startsWith("/refunds") ||
+    pathname.startsWith("/handbook") ||
+    pathname.startsWith("/incidents") ||
     pathname.startsWith("/api/") && !pathname.startsWith("/api/platform")
   );
 }
@@ -61,16 +79,22 @@ export async function middleware(request: NextRequest) {
 
   // ─── CRM (app.domen.ru) ───
   const crmToken = request.cookies.get("auth-token")?.value;
-  const isPublicPage = CRM_PUBLIC.some((p) => pathname.startsWith(p));
+  const isPublicPage = isPublicCrmPage(pathname);
   const isPublicApi =
     CRM_PUBLIC_API.some((p) => pathname.startsWith(p)) || isPublicInvitePreview(pathname, request.method);
 
   let crmValid = false;
   if (crmToken) {
     try {
-      await jwtVerify(crmToken, getJwtSecret());
-      crmValid = true;
+      const { payload } = await jwtVerify(crmToken, getJwtSecret());
+      const p = payload as Record<string, unknown>;
+      if (typeof p.userId === "string" && typeof p.seatId === "string" && p.userId && p.seatId) {
+        crmValid = true;
+      }
     } catch {
+      /* invalid token */
+    }
+    if (!crmValid && crmToken) {
       const res = isPublicPage || pathname === "/"
         ? NextResponse.next()
         : NextResponse.redirect(new URL("/login", request.url));
@@ -79,11 +103,21 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  if (LANDING_PUBLIC_API.some((p) => pathname.startsWith(p))) return NextResponse.next();
   if (isPublicApi) return NextResponse.next();
+  if (pathname.startsWith("/landing-preview")) return NextResponse.next();
+  if (pathname === "/register") {
+    return NextResponse.redirect(new URL("/get-access", request.url));
+  }
 
-  // Лендинг (domen.ru) — главная без редиректа
+  // Лендинг (domen.ru / localhost) — главная всегда публичная.
+  // Редирект на dashboard только на CRM-хосте (app.*).
   if (pathname === "/") {
-    if (crmValid) return NextResponse.redirect(new URL("/dashboard", request.url));
+    const zone = resolveAppZone(request.headers.get("host") ?? "", pathname);
+    if (zone === "crm") {
+      if (crmValid) return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
     return NextResponse.next();
   }
 
@@ -91,7 +125,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (crmValid && isPublicPage && !pathname.startsWith("/register/staff")) {
+  if (crmValid && pathname === "/register") {
+    return NextResponse.redirect(new URL("/get-access", request.url));
+  }
+
+  if (
+    crmValid &&
+    (pathname === "/login" || pathname.startsWith("/verify-email")) &&
+    !request.nextUrl.searchParams.has("session")
+  ) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

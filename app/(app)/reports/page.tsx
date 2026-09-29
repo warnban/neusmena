@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { Eye, EyeOff } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
@@ -20,12 +21,13 @@ import { MonthComparisonPanel } from "@/components/reports/month-comparison-pane
 import { CategoryBreakdownPanel } from "@/components/reports/category-breakdown-panel";
 import { TransactionsPanel } from "@/components/reports/transactions-panel";
 import { MetersPanel } from "@/components/reports/meters-panel";
+import { RevenueSlicePanel } from "@/components/reports/revenue-slice-panel";
 import { OperationDateField } from "@/components/ui/operation-date-field";
 import { mskDateKey } from "@/lib/msk-time";
 
 export default function ReportsPage() {
   const { transactions, hotelId, bookings, rooms, beds, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings } = useApp();
-  const [tab, setTab] = useState<"analytics" | "finance" | "shift" | "daily" | "salaries" | "transactions" | "meters">("analytics");
+  const [tab, setTab] = useState<"analytics" | "revenue" | "finance" | "shift" | "daily" | "salaries" | "transactions" | "meters">("analytics");
   const [analyticsView, setAnalyticsView] = useState<"overview" | "comparison">("overview");
   const [pmVis, setPmVis] = useState<Record<string, boolean>>({});
   const [txPresetMethod, setTxPresetMethod] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export default function ReportsPage() {
     const totals: Record<string, number> = {};
     const scoped = hotelId === "all" ? bookings : bookings.filter((b) => b.hotelId === hotelId);
     scoped.forEach((b) => { totals[b.source] = (totals[b.source] || 0) + b.amount; });
-    return Object.entries(totals).map(([k, v]) => ({ name: sourceConfig[k]?.label ?? k, color: sourceConfig[k]?.solid ?? "#3B82F6", v }));
+    return Object.entries(totals).map(([k, v]) => ({ name: sourceConfig[k]?.label ?? k, color: sourceConfig[k]?.solid ?? "hsl(var(--primary))", v }));
   }, [bookings, hotelId, sourceConfig]);
 
   async function submitEncashment() {
@@ -138,7 +140,7 @@ export default function ReportsPage() {
     return (
       <>
         <TopBar title="Отчёты и аналитика" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={8} cols={5} /></div>
       </>
     );
   }
@@ -147,7 +149,7 @@ export default function ReportsPage() {
     <>
       <TopBar title="Отчёты и аналитика" />
       <div className="bg-card px-6 flex gap-1 border-b border-border flex-wrap">
-        {[["analytics", "Аналитика"], ["finance", "Финансы"], ["shift", "Пересменка"], ["daily", "Ежедневный"], ["salaries", "Зарплаты"], ["transactions", "Транзакции"], ["meters", "Счётчики"]].map(([t, l]) => (
+        {[["analytics", "Аналитика"], ["revenue", "Срез по выручке"], ["finance", "Финансы"], ["shift", "Пересменка"], ["daily", "Ежедневный"], ["salaries", "Зарплаты"], ["transactions", "Транзакции"], ["meters", "Счётчики"]].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t as typeof tab)} className={`px-4 py-3 text-[13px] font-semibold transition-all ${tab === t ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}>{l}</button>
         ))}
       </div>
@@ -191,9 +193,9 @@ export default function ReportsPage() {
             ) : (
               <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KpiCard label="Загрузка" value={`${kpis.occupancy}%`} sub="текущий месяц" trend={kpis.occupancyTrend ? `${kpis.occupancyTrend > 0 ? "+" : ""}${kpis.occupancyTrend}%` : undefined} trendDir={kpis.occupancyTrend >= 0 ? "up" : "down"} spark={kpis.spark} accent="#3B82F6" />
+              <KpiCard label="Загрузка" value={`${kpis.occupancy}%`} sub="текущий месяц" trend={kpis.occupancyTrend ? `${kpis.occupancyTrend > 0 ? "+" : ""}${kpis.occupancyTrend}%` : undefined} trendDir={kpis.occupancyTrend >= 0 ? "up" : "down"} spark={kpis.spark} accent="hsl(var(--primary))" />
               <KpiCard label="ADR" value={money(kpis.adr)} sub={`${kpis.soldNightsMonth} ночей · проживание`} accent="#10B981" />
-              <KpiCard label="RevPAR" value={money(kpis.revpar)} sub="выручка/доступный номер·день" accent="#8B5CF6" />
+              <KpiCard label="RevPAR" value={money(kpis.revpar)} sub="выручка/доступный номер·день" accent="hsl(var(--primary))" />
               <KpiCard label="Выручка" value={`${(kpis.totalRevenue / 1_000_000).toFixed(2)}M ₽`} sub="6 мес." trend={kpis.revenueTrend ? `${kpis.revenueTrend > 0 ? "+" : ""}${kpis.revenueTrend}%` : undefined} trendDir={kpis.revenueTrend >= 0 ? "up" : "down"} accent="#F59E0B" />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -206,7 +208,7 @@ export default function ReportsPage() {
                     <YAxis yAxisId="rev" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                     <YAxis yAxisId="occ" orientation="right" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} domain={[50, 100]} tickFormatter={(v) => v + "%"} />
                     <Tooltip />
-                    <Bar yAxisId="rev" dataKey="rev" fill="#3B82F6" radius={[6, 6, 0, 0]} barSize={32} name="Выручка" />
+                    <Bar yAxisId="rev" dataKey="rev" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} barSize={32} name="Выручка" />
                     <Line yAxisId="occ" type="monotone" dataKey="occ" stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: "#10B981" }} name="Загрузка %" />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -228,6 +230,10 @@ export default function ReportsPage() {
               </>
             )}
           </>
+        )}
+
+        {tab === "revenue" && (
+          <RevenueSlicePanel transactions={transactions} hotels={hotels} />
         )}
 
         {tab === "finance" && (

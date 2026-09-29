@@ -5,6 +5,7 @@ import { calcStayAmount } from "@/lib/booking-pricing";
 import { assertHotelWrite } from "@/lib/permissions";
 import { mskDateKey, mskDayAfter, mskNightDiff, parseMskDateKey } from "@/lib/msk-time";
 import { apiErrorMessage } from "@/lib/api-error";
+import { hasBookingDateOverlap } from "@/lib/booking-availability.server";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -52,6 +53,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     if (newCheckOutKey === prevCheckOutKey) {
       return NextResponse.json({ error: "Выберите другую дату выезда" }, { status: 400 });
+    }
+
+    // Проверка коллизий: продление не должно перекрыть последующую бронь этого же номера/койки.
+    if (newCheckOutKey > prevCheckOutKey) {
+      const conflict = await hasBookingDateOverlap({
+        hotelId: booking.hotelId,
+        checkIn: checkInKey,
+        checkOut: newCheckOutKey,
+        roomId: booking.bedId ? undefined : booking.roomId,
+        bedId: booking.bedId ?? undefined,
+        excludeBookingId: booking.id,
+      });
+      if (conflict) {
+        return NextResponse.json(
+          { error: "На эти даты уже есть другая бронь или размещение организации" },
+          { status: 409 }
+        );
+      }
     }
 
     const newCheckOut = parseMskDateKey(newCheckOutKey);

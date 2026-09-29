@@ -15,28 +15,34 @@ const Ctx = createContext<HamsterModeContext | null>(null);
 export function HamsterModeProvider({
   children,
   canUse,
+  initialEnabled = false,
+  persist = true,
 }: {
   children: React.ReactNode;
   canUse: boolean;
+  initialEnabled?: boolean;
+  persist?: boolean;
 }) {
-  const [enabled, setEnabledState] = useState(false);
+  const [enabled, setEnabledState] = useState(initialEnabled && canUse);
 
   useEffect(() => {
+    if (!persist) return;
     try {
       const saved = localStorage.getItem(HAMSTER_STORAGE_KEY);
       if (saved === "true" && canUse) setEnabledState(true);
     } catch {}
-  }, [canUse]);
+  }, [canUse, persist]);
 
   const setEnabled = useCallback(
     (v: boolean) => {
       if (!canUse && v) return;
       setEnabledState(v);
+      if (!persist) return;
       try {
         localStorage.setItem(HAMSTER_STORAGE_KEY, v ? "true" : "false");
       } catch {}
     },
-    [canUse]
+    [canUse, persist]
   );
 
   const toggle = useCallback(() => {

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, CreditCard, Tag } from "lucide-react";
+import { CreditCard, Tag } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
-import { Icon } from "@/components/icon";
 import { DatePicker } from "@/components/ui/date-picker";
+import { PaymentMethodPicker, type PaymentSelection } from "@/components/payments/payment-method-picker";
+import { sumSplitParts, type PaymentSplitPart } from "@/lib/payment-split";
 import { OperationDateField } from "@/components/ui/operation-date-field";
 import { OtaChannelSelect } from "@/components/ui/ota-channel-select";
 import { money, fmtDate } from "@/lib/format";
@@ -35,6 +36,7 @@ export type BookingPaymentPayload = {
   nights: number;
   paidThroughDate: string;
   paymentMethod: string;
+  splits?: PaymentSplitPart[];
   note?: string;
   channelId?: string;
   discountPercent: number;
@@ -75,7 +77,7 @@ export function BookingPaymentForm({
   const [periodMode, setPeriodMode] = useState<PeriodMode>("nights");
   const [nightsCount, setNightsCount] = useState("1");
   const [paidThrough, setPaidThrough] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [paymentSel, setPaymentSel] = useState<PaymentSelection>({ mode: "single", method: "cash" });
   const [channelId, setChannelId] = useState("");
   const [note, setNote] = useState("");
   const [operationDate, setOperationDate] = useState(() => mskDateKey());
@@ -142,20 +144,30 @@ export function BookingPaymentForm({
     return mskAddDays(firstUnpaidKey, selectedNights - 1);
   }, [periodMode, paidThrough, firstUnpaidKey, selectedNights]);
 
+  const isSplit = paymentSel.mode === "split";
+  const method = paymentSel.mode === "single" ? paymentSel.method : (paymentSel.parts[0]?.method ?? "cash");
+
   const matchedRule = useMemo(() => {
-    if (!useRules) return null;
+    if (!useRules || isSplit) return null;
     return matchDiscountRule(hotelRules, { paymentNights: selectedNights, paymentMethod: method });
-  }, [useRules, hotelRules, selectedNights, method]);
+  }, [useRules, isSplit, hotelRules, selectedNights, method]);
 
   const paymentNightly = useRules
-    ? paymentNightlyWithRule(roomPrice, selectedNights, matchedRule)
+    ? isSplit
+      ? roomPrice
+      : paymentNightlyWithRule(roomPrice, selectedNights, matchedRule)
     : discountChanged
       ? quoteNightly
       : contractNightly;
 
   const paymentAmount = useRules
-    ? calcPaymentWithRule(roomPrice, selectedNights, matchedRule)
+    ? isSplit
+      ? selectedNights * roomPrice
+      : calcPaymentWithRule(roomPrice, selectedNights, matchedRule)
     : selectedNights * paymentNightly;
+
+  // Сумма для смежной оплаты всегда без правило-скидки (полный тариф).
+  const splitTarget = selectedNights * (useRules ? roomPrice : paymentNightly);
 
   const contractDebt = Math.max(0, contractAmount - effectivePaid);
   const pmEntries = Object.entries(pmConfig);
@@ -174,7 +186,16 @@ export function BookingPaymentForm({
       setError("Сумма оплаты должна быть больше нуля");
       return;
     }
-    if (method === OTA_PAYMENT_CODE && !channelId) {
+    if (isSplit) {
+      if (paymentSel.parts.some((p) => p.amount <= 0)) {
+        setError("Сумма каждого способа должна быть больше нуля");
+        return;
+      }
+      if (sumSplitParts(paymentSel.parts) !== paymentAmount) {
+        setError("Распределите всю сумму по способам оплаты");
+        return;
+      }
+    } else if (method === OTA_PAYMENT_CODE && !channelId) {
       setError("Выберите канал OTA");
       return;
     }
@@ -183,11 +204,12 @@ export function BookingPaymentForm({
       nights: selectedNights,
       paidThroughDate: selectedPaidThrough,
       paymentMethod: method,
+      splits: isSplit ? paymentSel.parts : undefined,
       note: note.trim() || undefined,
-      channelId: method === OTA_PAYMENT_CODE ? channelId : undefined,
+      channelId: !isSplit && method === OTA_PAYMENT_CODE ? channelId : undefined,
       discountPercent: useRules ? 0 : pct,
       discountPerNight: useRules ? 0 : perNight,
-      discountRuleId: matchedRule?.id,
+      discountRuleId: isSplit ? undefined : matchedRule?.id,
       operationDate: canManageSettings ? operationDate : undefined,
     });
     if (!ok) setError("Не удалось принять платёж");
@@ -231,7 +253,7 @@ export function BookingPaymentForm({
           className="rounded-xl p-4 border-2 flex items-start gap-3"
           style={{
             borderColor: matchedRule ? "#10B981" : "hsl(var(--border))",
-            background: matchedRule ? "#ECFDF5" : undefined,
+            background: matchedRule ? "hsl(var(--success) / 0.1)" : undefined,
           }}
         >
           <Tag size={16} className={matchedRule ? "text-success mt-0.5" : "text-muted-foreground mt-0.5"} />
@@ -293,7 +315,7 @@ export function BookingPaymentForm({
               className="flex-1 py-2 text-[12px] font-bold rounded-lg border transition-all"
               style={{
                 borderColor: periodMode === id ? "#10B981" : "hsl(var(--border))",
-                background: periodMode === id ? "#ECFDF5" : undefined,
+                background: periodMode === id ? "hsl(var(--success) / 0.1)" : undefined,
                 color: periodMode === id ? "#059669" : undefined,
               }}
             >
@@ -340,33 +362,24 @@ export function BookingPaymentForm({
       </div>
 
       <div>
-        <label className="text-[12px] font-bold text-muted-foreground block mb-2">Способ оплаты</label>
-        <div className="grid grid-cols-2 gap-2">
-          {pmEntries.map(([k, cfg]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => {
-                setMethod(k);
-                if (k !== OTA_PAYMENT_CODE) setChannelId("");
-              }}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all"
-              style={{
-                background: method === k ? cfg.bg : undefined,
-                border: `2px solid ${method === k ? cfg.color : "hsl(var(--border))"}`,
-                color: method === k ? cfg.color : undefined,
-              }}
-            >
-              <Icon name={cfg.icon} size={14} />
-              <span className="text-[12px] font-semibold">{cfg.label}</span>
-              {method === k && <Check size={12} className="ml-auto" />}
-            </button>
-          ))}
-        </div>
-        {method === OTA_PAYMENT_CODE && (
+        <PaymentMethodPicker
+          pmConfig={pmConfig}
+          total={splitTarget}
+          value={paymentSel}
+          onChange={(sel) => {
+            setPaymentSel(sel);
+            if (sel.mode !== "single" || sel.method !== OTA_PAYMENT_CODE) setChannelId("");
+          }}
+        />
+        {!isSplit && method === OTA_PAYMENT_CODE && (
           <div className="mt-3">
             <OtaChannelSelect hotelId={booking.hotelId} channels={channels} value={channelId} onChange={setChannelId} />
           </div>
+        )}
+        {isSplit && useRules && (
+          <p className="text-[11px] text-muted-foreground mt-2">
+            При смежной оплате скидка по правилам отеля не применяется — расчёт по полному тарифу.
+          </p>
         )}
       </div>
 
@@ -392,9 +405,14 @@ export function BookingPaymentForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={busy || paymentAmount <= 0 || (method === OTA_PAYMENT_CODE && !channelId)}
+          disabled={
+            busy ||
+            paymentAmount <= 0 ||
+            (!isSplit && method === OTA_PAYMENT_CODE && !channelId) ||
+            (isSplit && sumSplitParts(paymentSel.parts) !== paymentAmount)
+          }
           className="w-full flex items-center justify-center gap-2 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg,#10B981,#059669)" }}
+          style={{ background: "hsl(var(--success))" }}
         >
           <CreditCard size={14} /> Принять платёж
         </button>

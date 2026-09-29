@@ -235,11 +235,11 @@ export function DailyReportPanel({
               />
             </div>
             <div className="flex gap-3 text-[12px]">
-              <div className="px-3 py-2 rounded-lg bg-[#EFF6FF] border border-[#BFDBFE]">
+              <div className="px-3 py-2 rounded-lg bg-accent border border-border">
                 <span className="text-muted-foreground">Ночь: </span>
-                <span className="font-bold text-[#2563EB]">{report?.nightAdminName || "—"}</span>
+                <span className="font-semibold text-accent-foreground">{report?.nightAdminName || "—"}</span>
               </div>
-              <div className="px-3 py-2 rounded-lg bg-[#FFFBEB] border border-[#FDE68A]">
+              <div className="px-3 py-2 rounded-lg bg-warning/10 border border-warning/30">
                 <span className="text-muted-foreground">День: </span>
                 <span className="font-bold text-[#D97706]">{report?.dayAdminName || "—"}</span>
               </div>
@@ -285,7 +285,7 @@ export function DailyReportPanel({
               onClick={closeReport}
               disabled={closing || loading}
               className="inline-flex items-center gap-2 px-4 py-2 text-white text-[12px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}
+              style={{ background: "hsl(var(--primary))" }}
             >
               {closing ? <Loader2 size={14} className="animate-spin" /> : <FileCheck size={14} />}
               {closing ? "Закрытие…" : "Закрыть отчёт"}
@@ -304,8 +304,8 @@ export function DailyReportPanel({
         )}
 
         {closingToday && !closed && (
-          <div className="rounded-xl border border-blue-300/50 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 text-[12px]">
-            <p className="font-bold text-blue-800 dark:text-blue-200">Закрытие отчёта за сегодня</p>
+          <div className="rounded-lg border border-border bg-accent px-4 py-3 text-[12px]">
+            <p className="font-semibold text-accent-foreground">Закрытие отчёта за сегодня</p>
             <p className="text-muted-foreground mt-0.5">
               В отчёт войдут операции, признанные на сегодня (включая OTA после выезда). После закрытия до 00:01 МСК
               нельзя проводить оплаты, услуги, расходы, инкассацию и зарплаты.

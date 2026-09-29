@@ -9,6 +9,7 @@ import { formatBookingPlaceOptionLabel, guestGenderMatchesDorm } from "@/lib/dor
 import { DatePicker } from "@/components/ui/date-picker";
 import { PhoneInput, getPhoneError } from "@/components/ui/phone-input";
 import { Select } from "@/components/ui/select";
+import { GuestFlagWarning } from "@/components/guests/guest-flags";
 import type { BookingSource, Guest } from "@/lib/types";
 
 interface Props {
@@ -279,7 +280,14 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
                     onClick={() => pickGuest(g)}
                     className="w-full text-left px-3 py-2.5 hover:bg-muted border-b border-border/40 last:border-0"
                   >
-                    <div className="text-[13px] font-bold text-foreground">{g.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] font-bold text-foreground">{g.name}</span>
+                      {g.blacklisted ? (
+                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-destructive/12 text-destructive">ЧС</span>
+                      ) : g.flagged ? (
+                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-warning/15 text-warning" title="Проблемный гость">!</span>
+                      ) : null}
+                    </div>
                     <div className="text-[11px] text-muted-foreground">
                       {g.phone || "—"} · {g.visits} визит(ов)
                       {g.gender === "M" ? " · муж." : g.gender === "F" ? " · жен." : ""}
@@ -290,14 +298,17 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
               </div>
             )}
             {selectedGuest && (
-              <div className="mt-2 p-3 rounded-xl bg-muted/60 border border-border text-[12px]">
-                <span className="font-bold text-foreground">{selectedGuest.name}</span>
-                <span className="text-muted-foreground ml-2">из базы</span>
-                <span className="text-muted-foreground ml-2">
-                  {selectedGuest.gender === "M" ? "муж." : "жен."}
-                </span>
-                {selectedGuest.isForeigner && <span className="ml-2 text-[#D97706] font-semibold">иностранец</span>}
-              </div>
+              <>
+                <div className="mt-2 p-3 rounded-xl bg-muted/60 border border-border text-[12px]">
+                  <span className="font-bold text-foreground">{selectedGuest.name}</span>
+                  <span className="text-muted-foreground ml-2">из базы</span>
+                  <span className="text-muted-foreground ml-2">
+                    {selectedGuest.gender === "M" ? "муж." : "жен."}
+                  </span>
+                  {selectedGuest.isForeigner && <span className="ml-2 text-[#D97706] font-semibold">иностранец</span>}
+                </div>
+                <GuestFlagWarning guest={selectedGuest} className="mt-2" />
+              </>
             )}
           </div>
 
@@ -361,7 +372,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
 
           {!selectedGuestId && (
             <>
-              <label className={`flex items-start gap-3 p-3.5 rounded-xl cursor-pointer border transition-colors ${isForeigner ? "border-[#FDE68A] bg-[#FFFBEB]" : "border-border bg-muted/50"}`}>
+              <label className={`flex items-start gap-3 p-3.5 rounded-lg cursor-pointer border transition-colors ${isForeigner ? "border-warning/30 bg-warning/10" : "border-border bg-muted/50"}`}>
                 <input type="checkbox" checked={isForeigner} onChange={(e) => setIsForeigner(e.target.checked)} className="mt-0.5" />
                 <div>
                   <div className="flex items-center gap-1.5 text-[13px] font-bold text-foreground">
@@ -372,9 +383,9 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
                 </div>
               </label>
               {isForeigner && (
-                <div className="flex items-start gap-2 p-3 rounded-xl text-[11px]" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
+                <div className="flex items-start gap-2 p-3 rounded-lg text-[11px] bg-destructive/10 border border-destructive/30">
                   <AlertTriangle size={14} className="text-destructive flex-shrink-0 mt-0.5" />
-                  <span className="text-[#991B1B]">Уведомление в МВД — в течение 2 рабочих дней. Отметку можно поставить в профиле гостя.</span>
+                  <span className="text-destructive/90">Уведомление в МВД — в течение 2 рабочих дней. Отметку можно поставить в профиле гостя.</span>
                 </div>
               )}
             </>
@@ -417,7 +428,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-bold rounded-xl border border-border text-muted-foreground hover:bg-muted">Отмена</button>
-            <button type="submit" disabled={busy || !activeHotel || genderMismatch} onClick={submit} className="px-4 py-2 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "linear-gradient(135deg,#3B82F6,#2563EB)" }}>
+            <button type="submit" disabled={busy || !activeHotel || genderMismatch} onClick={submit} className="px-4 py-2 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
               {busy ? "Создание…" : "Создать бронь"}
             </button>
           </div>

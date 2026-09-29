@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Icon } from "@/components/icon";
@@ -84,9 +85,9 @@ type LinenOverview = {
 };
 
 const STATUS_STYLE: Record<LinenStatus, { bg: string; border: string; text: string; icon: typeof CheckCircle2 }> = {
-  ok: { bg: "#F0FDF4", border: "#A7F3D0", text: "#059669", icon: CheckCircle2 },
-  warning: { bg: "#FFFBEB", border: "#FDE68A", text: "#D97706", icon: AlertTriangle },
-  alert: { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626", icon: AlertTriangle },
+  ok: { bg: "hsl(var(--success) / 0.12)", border: "hsl(var(--success) / 0.3)", text: "hsl(var(--success))", icon: CheckCircle2 },
+  warning: { bg: "hsl(var(--warning) / 0.12)", border: "hsl(var(--warning) / 0.3)", text: "hsl(var(--warning))", icon: AlertTriangle },
+  alert: { bg: "hsl(var(--destructive) / 0.12)", border: "hsl(var(--destructive) / 0.3)", text: "hsl(var(--destructive))", icon: AlertTriangle },
 };
 
 const PERIODS = [14, 30, 60] as const;
@@ -295,7 +296,7 @@ export default function LinenControlPage() {
     return (
       <>
         <TopBar title="Контроль белья" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6"><TableSkeleton rows={8} cols={5} /></div>
       </>
     );
   }
@@ -373,13 +374,13 @@ export default function LinenControlPage() {
                 label="Смен белья"
                 value={String(overview.usage.changesCount)}
                 sub="уборок «Готово»"
-                accent="#2563EB"
+                accent="hsl(var(--primary))"
               />
               <KpiCard
                 label="Доставок"
                 value={String(overview.delivered.count)}
                 sub={`стирка ${money(overview.delivered.washCost)}`}
-                accent="#7C3AED"
+                accent="hsl(var(--warning))"
               />
               <KpiCard
                 label="Разница"

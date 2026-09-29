@@ -7,6 +7,9 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { VipMark, AttributeTag, StatusPill } from "@/components/ui/status";
+import { GuestFlagBadges, GuestFlagWarning } from "@/components/guests/guest-flags";
+import { TableSkeleton } from "@/components/ui/primitives";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits, dayDiff } from "@/lib/format";
@@ -34,11 +37,11 @@ const DOC_LABELS: Record<string, string> = {
 };
 
 const DOC_COLORS: Record<string, { bg: string; color: string }> = {
-  passport: { bg: "#EFF6FF", color: "#2563EB" },
-  visa: { bg: "#F0FDF4", color: "#059669" },
-  migration_card: { bg: "#FFF7ED", color: "#D97706" },
-  id_card: { bg: "#F5F3FF", color: "#7C3AED" },
-  other: { bg: "#F8FAFC", color: "#64748B" },
+  passport: { bg: "hsl(var(--primary) / 0.12)", color: "hsl(var(--primary))" },
+  visa: { bg: "hsl(var(--success) / 0.12)", color: "hsl(var(--success))" },
+  migration_card: { bg: "hsl(var(--warning) / 0.12)", color: "hsl(var(--warning))" },
+  id_card: { bg: "hsl(var(--muted-foreground) / 0.12)", color: "hsl(var(--muted-foreground))" },
+  other: { bg: "hsl(var(--muted-foreground) / 0.08)", color: "hsl(var(--muted-foreground))" },
 };
 
 function InfoRow({ label, value, warn }: { label: string; value?: string; warn?: boolean }) {
@@ -215,7 +218,9 @@ export default function GuestsPage() {
     return (
       <>
         <TopBar title="База гостей" />
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Загрузка…</div>
+        <div className="flex-1 p-4 md:p-6">
+          <TableSkeleton rows={10} cols={4} />
+        </div>
       </>
     );
   }
@@ -286,21 +291,24 @@ export default function GuestsPage() {
               const stayBk = currentStayByGuest.get(g.id);
               const stayRoom = stayBk ? rooms.find((r) => r.id === stayBk.roomId) : undefined;
               return (
-                <button key={g.id} onClick={() => setSelected(g)} className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b border-border/40 relative ${selected?.id === g.id ? "bg-accent" : "hover:bg-muted/50"} ${isStaying ? "border-l-4 border-l-success" : "border-l-4 border-l-transparent opacity-90"}`}>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 relative" style={{ background: g.vip ? "linear-gradient(135deg,#FEF3C7,#FDE68A)" : "linear-gradient(135deg,#EFF6FF,#DBEAFE)", color: g.vip ? "#D97706" : "#2563EB" }}>
+                <button key={g.id} onClick={() => setSelected(g)} className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b border-border/60 relative ${selected?.id === g.id ? "bg-accent" : "hover:bg-muted/50"} ${isStaying ? "border-l-2 border-l-success" : "border-l-2 border-l-transparent"}`}>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-semibold flex-shrink-0 relative bg-secondary text-secondary-foreground border border-border">
                     {inits(g.name)}
                     <div className="absolute -bottom-0.5 -right-0.5 text-[11px] leading-none">{NATIONALITY_FLAGS[g.nationality] ?? "🌐"}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-[13px] font-bold text-foreground truncate">{g.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[13px] font-medium text-foreground truncate">{g.name}</span>
+                      {g.vip && <VipMark />}
+                      {g.blacklisted ? (
+                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-destructive/12 text-destructive flex-shrink-0">ЧС</span>
+                      ) : g.flagged ? (
+                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-warning/15 text-warning flex-shrink-0" title="Проблемный гость">!</span>
+                      ) : null}
                       {isStaying && (
-                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ background: "#DCFCE7", color: "#166534", border: "1px solid #86EFAC" }}>
-                          №{stayRoom?.number}
-                        </span>
+                        <AttributeTag label={`№${stayRoom?.number}`} dotColor="hsl(var(--success))" className="flex-shrink-0" />
                       )}
-                      {g.vip && <span className="text-[9px] font-black px-1 rounded" style={{ background: "#FEF3C7", color: "#D97706" }}>VIP</span>}
-                      {g.isForeigner && <span className="text-[9px] font-black px-1 rounded" style={{ background: "#FFF7ED", color: "#D97706" }}>ИНО</span>}
+                      {g.isForeigner && <span className="eyebrow text-[9px] flex-shrink-0">ИНО</span>}
                     </div>
                     <div className="text-[11px] truncate">
                       {isStaying ? (
@@ -339,47 +347,55 @@ export default function GuestsPage() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4 custom-scrollbar">
-            <div className="bg-card rounded-xl p-4 border border-border space-y-4">
+            <div className="bg-card rounded-lg p-4 border border-border space-y-4">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-[18px] font-black shadow-sm relative flex-shrink-0" style={{ background: selected.vip ? "linear-gradient(135deg,#FEF3C7,#FDE68A)" : "linear-gradient(135deg,#EFF6FF,#DBEAFE)", color: selected.vip ? "#D97706" : "#2563EB" }}>
+                <div className="w-14 h-14 rounded-lg flex items-center justify-center text-[18px] font-semibold relative flex-shrink-0 bg-secondary text-secondary-foreground border border-border">
                   {inits(selected.name)}
                   <div className="absolute -bottom-1 -right-1 text-[16px] leading-none">{NATIONALITY_FLAGS[selected.nationality] ?? "🌐"}</div>
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-[16px] font-black text-foreground break-words">{selected.lastName} {selected.firstName} {selected.middleName}</h2>
-                    {selected.vip && <span className="text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: "#FEF3C7", color: "#D97706", border: "1px solid #FDE68A" }}>⭐ VIP</span>}
+                    <h2 className="font-display text-[19px] font-semibold text-foreground break-words leading-tight">{selected.lastName} {selected.firstName} {selected.middleName}</h2>
+                    {selected.vip && <VipMark label="VIP" />}
+                    <GuestFlagBadges guest={selected} className="inline-flex items-center gap-1.5 flex-wrap" />
                   </div>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${selected.isForeigner ? "bg-[#FFF7ED] text-[#D97706] border border-[#FDE68A]" : "bg-success/10 text-success border border-success/30"}`}>
-                      {selected.isForeigner ? "Иностранный гражданин" : "Гражданин РФ"}
-                    </span>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${selected.regCardSigned ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                      {selected.regCardSigned ? "✓ Форма №5 подписана" : "⚠ Форма №5 не подписана"}
-                    </span>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {selected.isForeigner ? (
+                      <StatusPill tone={{ color: "hsl(var(--warning))", bg: "hsl(var(--warning) / 0.12)" }} label="Иностранный гражданин" />
+                    ) : (
+                      <StatusPill tone={{ color: "hsl(var(--success))", bg: "hsl(var(--success) / 0.1)" }} label="Гражданин РФ" />
+                    )}
+                    {selected.regCardSigned ? (
+                      <StatusPill tone={{ color: "hsl(var(--success))", bg: "hsl(var(--success) / 0.1)" }} label="Форма №5 подписана" />
+                    ) : (
+                      <StatusPill tone={{ color: "hsl(var(--destructive))", bg: "hsl(var(--destructive) / 0.1)" }} label="Форма №5 не подписана" />
+                    )}
                     {selected.isForeigner && (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: MIG_REG_STATUS[selected.migRegStatus].bg, color: MIG_REG_STATUS[selected.migRegStatus].color }}>
-                        <Icon name={MIG_REG_STATUS[selected.migRegStatus].icon} size={10} /> Миграц. учёт: {MIG_REG_STATUS[selected.migRegStatus].label}
-                      </span>
+                      <StatusPill
+                        tone={{ color: MIG_REG_STATUS[selected.migRegStatus].color, bg: MIG_REG_STATUS[selected.migRegStatus].bg }}
+                        label={`Миграц. учёт: ${MIG_REG_STATUS[selected.migRegStatus].label}`}
+                      />
                     )}
                   </div>
                 </div>
-                <button onClick={() => setSelected(null)} className="hidden md:flex p-2 rounded-xl text-muted-foreground border border-border hover:bg-muted flex-shrink-0" title="Свернуть анкету"><PanelRightClose size={16} /></button>
+                <button onClick={() => setSelected(null)} className="hidden md:flex p-2 rounded-md text-muted-foreground border border-border hover:bg-muted flex-shrink-0" title="Свернуть анкету"><PanelRightClose size={16} /></button>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => setEditGuest(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold rounded-xl text-primary border border-primary/30"><Edit2 size={12} /> Редактировать</button>
+                <button onClick={() => setEditGuest(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-md text-foreground border border-border hover:bg-muted transition-colors"><Edit2 size={12} /> Редактировать</button>
                 {canManageSettings && (
                   <button
                     type="button"
                     onClick={() => void removeGuest(selected)}
                     disabled={deleteBusy}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold rounded-xl text-destructive border border-destructive/30 hover:bg-destructive/5 disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-md text-destructive border border-destructive/30 hover:bg-destructive/5 disabled:opacity-50 transition-colors"
                   >
                     <Trash2 size={12} /> Удалить
                   </button>
                 )}
               </div>
             </div>
+
+            <GuestFlagWarning guest={selected} />
 
             {currentStay && currentRoom && (
               <div className="rounded-xl border-2 border-success/40 bg-success/5 p-4 flex items-center gap-4">
@@ -399,11 +415,11 @@ export default function GuestsPage() {
             )}
 
             {selected.isForeigner && (selected.migRegStatus === "pending" || selected.migRegStatus === "overdue") && (
-              <div className="flex items-start gap-3 p-3.5 rounded-xl text-[12px]" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
+              <div className="flex items-start gap-3 p-3.5 rounded-lg text-[12px] bg-destructive/10 border border-destructive/30">
                 <AlertOctagon size={16} className="text-destructive mt-0.5 flex-shrink-0" />
                 <div>
                   <strong className="text-destructive">Требуется миграционная регистрация!</strong>
-                  <div className="text-[#991B1B] mt-0.5">Срок подачи уведомления в МВД: <strong>{selected.migRegDeadline}</strong>.</div>
+                  <div className="text-destructive/90 mt-0.5">Срок подачи уведомления в МВД: <strong>{selected.migRegDeadline}</strong>.</div>
                 </div>
               </div>
             )}
@@ -505,8 +521,7 @@ export default function GuestsPage() {
                     {(selected.migRegStatus === "pending" || selected.migRegStatus === "overdue") && (
                       <button
                         onClick={() => setMigRegGuest(selected)}
-                        className="px-3 py-1.5 text-[11px] font-bold rounded-lg text-white hover:opacity-90"
-                        style={{ background: "#059669" }}
+                        className="px-3 py-1.5 text-[11px] font-semibold rounded-md text-success-foreground bg-success hover:opacity-90 transition-opacity"
                       >
                         Уведомление отправлено
                       </button>
@@ -518,8 +533,8 @@ export default function GuestsPage() {
 
             {selected.preferences && (
               <div className="bg-card rounded-xl p-4 border border-border">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Предпочтения</p>
-                <div className="flex items-start gap-2"><Star size={13} className="text-[#D97706] mt-0.5" /><p className="text-[13px] text-foreground/80">{selected.preferences}</p></div>
+                <p className="eyebrow mb-2">Предпочтения</p>
+                <div className="flex items-start gap-2"><Star size={13} className="mt-0.5" style={{ color: "hsl(var(--vip))" }} /><p className="text-[13px] text-foreground/80">{selected.preferences}</p></div>
               </div>
             )}
 

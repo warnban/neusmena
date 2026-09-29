@@ -18,19 +18,24 @@ export type SourceStyle = {
   label: string;
 };
 
+// Цвета — тема-зависимые токены (адаптируются под светлую/тёмную тему).
+const SRC_BG = "hsl(var(--secondary))";
+const SRC_TEXT = "hsl(var(--secondary-foreground))";
+const SRC_BORDER = "hsl(var(--border))";
+
 export const DEFAULT_BOOKING_SOURCES: Omit<BookingSourceDef, "id" | "active">[] = [
-  { code: "booking", label: "Booking.com", color: "#16A34A", bg: "#DCFCE7", text: "#166534", border: "#86EFAC", sortOrder: 0 },
-  { code: "expedia", label: "Expedia", color: "#2563EB", bg: "#DBEAFE", text: "#1E40AF", border: "#93C5FD", sortOrder: 1 },
-  { code: "direct", label: "Прямое", color: "#D97706", bg: "#FEF3C7", text: "#92400E", border: "#FDE68A", sortOrder: 2 },
-  { code: "ostrovok", label: "Ostrovok", color: "#DC2626", bg: "#FEE2E2", text: "#991B1B", border: "#FCA5A5", sortOrder: 3 },
-  { code: "yandex", label: "Яндекс", color: "#EA580C", bg: "#FFEDD5", text: "#9A3412", border: "#FDBA74", sortOrder: 4 },
+  { code: "booking", label: "Booking.com", color: "hsl(var(--primary))", bg: SRC_BG, text: SRC_TEXT, border: SRC_BORDER, sortOrder: 0 },
+  { code: "expedia", label: "Expedia", color: "hsl(var(--muted-foreground))", bg: SRC_BG, text: SRC_TEXT, border: SRC_BORDER, sortOrder: 1 },
+  { code: "direct", label: "Прямое", color: "hsl(var(--warning))", bg: SRC_BG, text: SRC_TEXT, border: SRC_BORDER, sortOrder: 2 },
+  { code: "ostrovok", label: "Ostrovok", color: "hsl(var(--destructive))", bg: SRC_BG, text: SRC_TEXT, border: SRC_BORDER, sortOrder: 3 },
+  { code: "yandex", label: "Яндекс", color: "hsl(var(--success))", bg: SRC_BG, text: SRC_TEXT, border: SRC_BORDER, sortOrder: 4 },
 ];
 
 const FALLBACK_STYLE: SourceStyle = {
-  bg: "#F1F5F9",
-  text: "#64748B",
-  border: "#E2E8F0",
-  solid: "#64748B",
+  bg: SRC_BG,
+  text: SRC_TEXT,
+  border: SRC_BORDER,
+  solid: "hsl(var(--muted-foreground))",
   label: "",
 };
 

@@ -47,7 +47,7 @@ export async function GET() {
   }
 
   const [seat, hotels, staff, rooms, beds, guests, organizations, organizationStays, bookings, transactions, catalogItems, hkTasks, channels, hotelDiscountRules, transactionCategories] = await Promise.all([
-    prisma.seat.findUnique({ where: { id: seatId }, select: { id: true, name: true } }),
+    prisma.seat.findUnique({ where: { id: seatId }, select: { id: true, name: true, plan: true } }),
     prisma.hotel.findMany({ where: hotelFilter, orderBy: { name: "asc" } }),
     prisma.staff.findMany({ where: { seatId }, include: { hotels: true } }),
     prisma.room.findMany({
@@ -124,8 +124,10 @@ export async function GET() {
   const services = catalogItems.filter((c) => c.kind === "service");
   const expenses = catalogItems.filter((c) => c.kind === "expense");
 
+  const premiumBadge = hotels.some((h) => h.aiEnabled);
+
   return NextResponse.json({
-    seat,
+    seat: seat ? { ...seat, premiumBadge } : seat,
     session: { userId: session.userId, role: session.role, email: session.email },
     hotels,
     staff: staffShaped,

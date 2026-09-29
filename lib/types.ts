@@ -19,6 +19,7 @@ export interface Hotel {
   email: string;
   legalName: string;
   website: string;
+  aiEnabled?: boolean;
 }
 
 export interface StaffMember {
@@ -111,6 +112,9 @@ export interface Guest {
   visits: number;
   preferences: string;
   vip: boolean;
+  flagged: boolean;
+  blacklisted: boolean;
+  flagReason: string;
   totalSpent: number;
   regCardSigned: boolean;
   documents: GuestDocument[];
@@ -243,6 +247,100 @@ export interface TransactionCategoryDef {
   sortOrder: number;
 }
 
+export type NoteColumnType = "text" | "link" | "document" | "folder";
+
+export interface NoteColumn {
+  id: string;
+  name: string;
+  type: NoteColumnType;
+}
+
+export interface NoteFileRef {
+  name: string;
+  path: string;
+  size: number;
+}
+
+export type NoteCellValue = string | NoteFileRef | NoteFileRef[] | null;
+
+export interface NoteRow {
+  id: string;
+  cells: Record<string, NoteCellValue>;
+}
+
+export interface NoteTable {
+  id: string;
+  pageId: string;
+  title: string;
+  columns: NoteColumn[];
+  rows: NoteRow[];
+  sortOrder: number;
+}
+
+export interface NotePage {
+  id: string;
+  title: string;
+  sortOrder: number;
+  tables: NoteTable[];
+}
+
+export interface NoteCard {
+  id: string;
+  title: string;
+  body: string;
+  color: string;
+  pinned: boolean;
+  sortOrder: number;
+  updatedAt: string;
+}
+
+export type IncidentType =
+  | "rule_violation"
+  | "property_damage"
+  | "public_order"
+  | "access_control"
+  | "intoxication"
+  | "other";
+
+export type IncidentStatus = "open" | "resolved";
+
+export type IncidentAttachmentKind =
+  | "guest_explanation"
+  | "rule_violation_act"
+  | "property_damage_act"
+  | "photo"
+  | "other";
+
+export interface IncidentAttachment {
+  id: string;
+  kind: IncidentAttachmentKind;
+  name: string;
+  filePath: string;
+  mimeType: string;
+  size: string;
+  uploadedAt: string;
+}
+
+export interface Incident {
+  id: string;
+  hotelId: string;
+  occurredAt: string;
+  type: IncidentType;
+  status: IncidentStatus;
+  guestName: string;
+  roomNumber: string;
+  location: string;
+  description: string;
+  actionsTaken: string;
+  policeCalled: boolean;
+  witnesses: string;
+  damageAmount: number;
+  createdByName: string;
+  attachments: IncidentAttachment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BookingSourceDef {
   id: string;
   code: string;
@@ -276,6 +374,7 @@ export interface Transaction {
   discountRuleId?: string | null;
   discountPercentApplied?: number | null;
   discountPerNightApplied?: number | null;
+  paymentGroupId?: string | null;
 }
 
 export interface ServiceItem {

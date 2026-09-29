@@ -68,6 +68,13 @@ export async function assertStorageFileAccess(
     return hotel ? { ok: true } : { ok: false, error: "Not found", status: 404 };
   }
 
+  if (kind === "notes") {
+    const ownerSeat = parts[2];
+    return ownerSeat && ownerSeat === seatId
+      ? { ok: true }
+      : { ok: false, error: "Forbidden", status: 403 };
+  }
+
   if (kind === "meters") {
     const readingId = parts[2];
     if (!readingId || !UUID.test(readingId)) {
