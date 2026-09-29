@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   Plus, UserCheck, LogOut, ShoppingBag, ArrowRightLeft, RotateCcw,
-  Gauge, LogIn, Users, Wallet, TrendingUp, ChevronRight,
+  Gauge, LogIn, Users, Wallet, TrendingUp, ChevronRight, Search,
 } from "lucide-react";
 import { TopBar } from "@/components/shell/topbar";
 import { Section, TableSkeleton } from "@/components/ui/primitives";
@@ -17,6 +17,7 @@ import { QueueModal } from "@/components/modals/queue-modal";
 import { SaleModal } from "@/components/modals/sale-modal";
 import { RefundModal } from "@/components/modals/refund-modal";
 import { RelocateModal } from "@/components/modals/relocate-modal";
+import { QuickLookupModal } from "@/components/modals/quick-lookup-modal";
 import {
   buildStayReminders,
   filterPaymentDueBookings,
@@ -178,6 +179,7 @@ export default function DashboardPage() {
   const [showSale, setShowSale] = useState(false);
   const [showRefund, setShowRefund] = useState(false);
   const [showRelocate, setShowRelocate] = useState(false);
+  const [showLookup, setShowLookup] = useState(false);
 
   const TODAY = useMemo(() => new Date(), []);
   const tomorrowKey = useMemo(() => mskDayAfter(mskDateKey(TODAY)), [TODAY]);
@@ -256,6 +258,7 @@ export default function DashboardPage() {
       {showSale && <SaleModal onClose={() => setShowSale(false)} />}
       {showRefund && <RefundModal onClose={() => setShowRefund(false)} />}
       {showRelocate && <RelocateModal onClose={() => setShowRelocate(false)} />}
+      {showLookup && <QuickLookupModal onClose={() => setShowLookup(false)} />}
     </>
   );
 
@@ -336,6 +339,7 @@ export default function DashboardPage() {
         {/* Действия смены — один primary + тихие вторичные */}
         <div className="flex flex-wrap gap-2">
           <ActionButton icon={<Plus size={15} />} label="Новое бронирование" primary onClick={() => setShowNewBooking(true)} />
+          <ActionButton icon={<Search size={15} />} label="Найти гостя" onClick={() => setShowLookup(true)} />
           <ActionButton icon={<UserCheck size={15} />} label="Заселить" count={arrivals.length} onClick={() => setQueueMode("arrival")} />
           <ActionButton icon={<LogOut size={15} />} label="Выселить" count={departures.length} onClick={() => setQueueMode("departure")} />
           <ActionButton icon={<ArrowRightLeft size={15} />} label="Переселить" onClick={() => setShowRelocate(true)} />
