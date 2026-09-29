@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 
 interface Props {
   guestName: string;
@@ -25,14 +26,13 @@ export function MigRegModal({ guestName, onClose, onSubmit }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-sm border border-border" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} className="max-w-sm" layerClassName="z-[60]">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border">
           <div>
             <h2 className="text-[15px] font-black text-foreground">Уведомление в МВД</h2>
             <p className="text-[11px] text-muted-foreground">{guestName}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4">
           <p className="text-[12px] text-muted-foreground">
@@ -54,7 +54,6 @@ export function MigRegModal({ guestName, onClose, onSubmit }: Props) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

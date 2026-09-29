@@ -57,11 +57,19 @@ export function Select({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") close();
     }
+    function onScroll(e: Event) {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      close();
+    }
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", close);
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", close);
     };
   }, [open, close]);
 

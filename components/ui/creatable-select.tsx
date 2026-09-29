@@ -113,6 +113,7 @@ export function CreatableSelect({
           <div
             ref={panelRef}
             id={listId}
+            data-popover-open="true"
             className="rounded-xl border border-border bg-card shadow-xl shadow-black/10 overflow-hidden flex flex-col animate-fade-in"
             style={style}
           >

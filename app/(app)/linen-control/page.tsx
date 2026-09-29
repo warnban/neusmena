@@ -17,6 +17,7 @@ import { TopBar } from "@/components/shell/topbar";
 import { TableSkeleton } from "@/components/ui/primitives";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Modal } from "@/components/ui/modal";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate } from "@/lib/format";
@@ -630,11 +631,10 @@ export default function LinenControlPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl max-h-[90vh] overflow-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <Modal onClose={() => setShowForm(false)} className="max-w-md" backdropClassName="bg-black/40" closeOnBackdrop={false}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border sticky top-0 bg-card z-10">
               <h3 className="text-[14px] font-bold">Доставка от прачечной</h3>
-              <button type="button" onClick={() => setShowForm(false)} className="p-1 rounded hover:bg-muted">
+              <button type="button" onClick={() => setShowForm(false)} aria-label="Закрыть" className="p-1 rounded hover:bg-muted">
                 <X size={18} />
               </button>
             </div>
@@ -738,22 +738,14 @@ export default function LinenControlPage() {
                 {formBusy ? "Сохранение…" : "Сохранить"}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {preview?.invoicePath && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          onClick={() => setPreview(null)}
-        >
-          <div
-            className="bg-card rounded-xl border border-border max-w-3xl w-full max-h-[85vh] overflow-auto p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal onClose={() => setPreview(null)} className="max-w-3xl p-4" backdropClassName="bg-black/50">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[13px] font-bold">{preview.invoiceName || "Накладная"}</p>
-              <button type="button" onClick={() => setPreview(null)} className="p-1 rounded hover:bg-muted">
+              <h3 className="text-[13px] font-bold">{preview.invoiceName || "Накладная"}</h3>
+              <button type="button" onClick={() => setPreview(null)} aria-label="Закрыть" className="p-1 rounded hover:bg-muted">
                 <X size={18} />
               </button>
             </div>
@@ -773,8 +765,7 @@ export default function LinenControlPage() {
                 className="max-w-full max-h-[70vh] object-contain rounded-lg mx-auto"
               />
             )}
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

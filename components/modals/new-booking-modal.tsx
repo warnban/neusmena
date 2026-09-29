@@ -9,6 +9,7 @@ import { formatBookingPlaceOptionLabel, guestGenderMatchesDorm } from "@/lib/dor
 import { DatePicker } from "@/components/ui/date-picker";
 import { PhoneInput, getPhoneError } from "@/components/ui/phone-input";
 import { Select } from "@/components/ui/select";
+import { Modal } from "@/components/ui/modal";
 import { GuestFlagWarning } from "@/components/guests/guest-flags";
 import type { BookingSource, Guest } from "@/lib/types";
 
@@ -243,8 +244,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col border border-border" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} className="max-w-lg">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border">
           <div>
             <h2 className="text-[15px] font-black text-foreground">Новое бронирование</h2>
@@ -252,10 +252,10 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
               {activeHotel ? `${activeHotel.name} · ${activeHotel.city}` : "Выберите отель в переключателе"}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
         </div>
 
-        <form onSubmit={submit} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+        <form onSubmit={submit} className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           {!activeHotel && (
             <div className="flex items-start gap-2 p-3 rounded-xl text-[12px] bg-warning/10 border border-warning/30 text-foreground">
               <AlertTriangle size={14} className="text-warning flex-shrink-0 mt-0.5" />
@@ -433,7 +433,6 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

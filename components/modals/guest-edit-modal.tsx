@@ -5,6 +5,7 @@ import { X, Save } from "lucide-react";
 import { GuestFormFields } from "@/components/forms/guest-form-fields";
 import { DocumentScanUpload } from "@/components/forms/document-scan-upload";
 import { useApp } from "@/components/providers/app-data";
+import { Modal } from "@/components/ui/modal";
 import { guestToForm, validateCheckInForm, type GuestFormData } from "@/lib/guest-form";
 import type { Guest } from "@/lib/types";
 
@@ -56,13 +57,12 @@ export function GuestEditModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-border" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} className="max-w-2xl">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border">
           <h2 className="text-[15px] font-black text-foreground">Редактирование гостя</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 custom-scrollbar">
           <div className="mb-4 space-y-2.5">
             <label className="flex items-center gap-2 text-[12px] font-semibold cursor-pointer">
               <input type="checkbox" checked={vip} onChange={(e) => setVip(e.target.checked)} />
@@ -128,7 +128,6 @@ export function GuestEditModal({
             <Save size={14} /> {busy ? "Сохранение…" : "Сохранить"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

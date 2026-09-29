@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { X, Search, RotateCcw, Check } from "lucide-react";
 import { Icon } from "@/components/icon";
 import { OperationDateField } from "@/components/ui/operation-date-field";
+import { Modal } from "@/components/ui/modal";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate } from "@/lib/format";
 import { mskDateKey } from "@/lib/msk-time";
@@ -167,21 +168,15 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
 
   if (!hotels.length) {
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-        <div className="bg-card rounded-2xl p-6 max-w-sm border border-border text-center">
+      <Modal onClose={onClose} className="max-w-sm p-6 text-center" layerClassName="z-[60]" ariaLabel="Нет доступных отелей">
           <p className="text-[13px] text-muted-foreground">Нет доступных отелей</p>
           <button onClick={onClose} className="mt-4 px-4 py-2 text-[12px] font-bold rounded-lg bg-muted">Закрыть</button>
-        </div>
-      </div>
+      </Modal>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-[520px] border border-border max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-[520px]" layerClassName="z-[60]">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <div>
             <h2 className="text-[15px] font-bold text-foreground flex items-center gap-2">
@@ -189,10 +184,10 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
             </h2>
             <p className="text-[12px] text-muted-foreground mt-0.5">С учётом скидок и удержания за позднее предупреждение</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4 custom-scrollbar">
           {!selected ? (
             <>
               <div className="relative">
@@ -376,7 +371,6 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

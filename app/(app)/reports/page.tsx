@@ -23,6 +23,7 @@ import { TransactionsPanel } from "@/components/reports/transactions-panel";
 import { MetersPanel } from "@/components/reports/meters-panel";
 import { RevenueSlicePanel } from "@/components/reports/revenue-slice-panel";
 import { OperationDateField } from "@/components/ui/operation-date-field";
+import { Modal } from "@/components/ui/modal";
 import { mskDateKey } from "@/lib/msk-time";
 
 export default function ReportsPage() {
@@ -355,8 +356,7 @@ export default function ReportsPage() {
       </div>
 
       {encModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setEncModal(null)}>
-          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-[380px] border border-border" onClick={(e) => e.stopPropagation()}>
+        <Modal onClose={() => setEncModal(null)} className="max-w-[380px]" layerClassName="z-[60]">
             <div className="px-6 py-4 border-b border-border"><h2 className="text-[15px] font-bold text-foreground">Инкассация</h2><p className="text-[12px] text-muted-foreground">{encModal && pmConfig[encModal]?.label}</p></div>
             <div className="p-6 space-y-4">
               <div className="rounded-xl p-4 text-center border" style={{ background: encModal ? pmConfig[encModal]?.bg : undefined, borderColor: encModal ? pmConfig[encModal]?.color + "40" : undefined }}>
@@ -374,8 +374,7 @@ export default function ReportsPage() {
               <button onClick={submitEncashment} className="flex-1 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90" style={{ background: "linear-gradient(135deg,#EF4444,#DC2626)" }}>Провести</button>
               <button onClick={() => setEncModal(null)} className="px-4 py-2.5 text-[13px] font-semibold rounded-xl bg-muted text-muted-foreground">Отмена</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

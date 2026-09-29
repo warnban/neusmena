@@ -228,8 +228,17 @@ export function DatePicker({
       if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
       setOpen(false);
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setOpen(false);
+    }
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   function isDisabled(d: Date): boolean {
@@ -267,6 +276,7 @@ export function DatePicker({
     createPortal(
       <div
         ref={panelRef}
+        data-popover-open="true"
         style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
         onMouseDown={(e) => e.stopPropagation()}
       >

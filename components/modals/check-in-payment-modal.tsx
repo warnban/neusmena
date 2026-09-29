@@ -10,6 +10,7 @@ import type { Booking } from "@/lib/types";
 import type { GuestFormData } from "@/lib/guest-form";
 import { formDisplayName } from "@/lib/guest-form";
 import { BookingPaymentForm, type BookingPaymentPayload } from "@/components/bookings/booking-payment-form";
+import { Modal } from "@/components/ui/modal";
 
 export function CheckInPaymentModal({
   booking,
@@ -111,11 +112,7 @@ export function CheckInPaymentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-[520px] border border-border max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-[520px]" layerClassName="z-[70]" backdropClassName="bg-black/50 backdrop-blur-sm">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
           <div>
             <h2 className="text-[15px] font-bold text-foreground">Оплата проживания</h2>
@@ -123,7 +120,7 @@ export function CheckInPaymentModal({
               {displayGuestName} · №{room?.number}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">
             <X size={16} />
           </button>
         </div>
@@ -161,7 +158,6 @@ export function CheckInPaymentModal({
             <p className="text-[12px] text-destructive font-semibold mt-3">{error}</p>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

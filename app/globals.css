@@ -144,6 +144,24 @@
   scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
 }
 
+/* ─── Модальные окна ───────────────────────────────────────────── */
+/* dvh учитывает адресную строку мобильных браузеров; vh — запасной вариант */
+.modal-panel {
+  max-height: calc(100vh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+}
+.modal-panel-sheet {
+  max-height: calc(100vh - 0.75rem);
+  max-height: calc(100dvh - 0.75rem);
+}
+@media (min-width: 640px) {
+  .modal-panel,
+  .modal-panel-sheet {
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
+  }
+}
+
 /* ─── Recharts под тему ────────────────────────────────────────── */
 .recharts-cartesian-grid line { stroke: hsl(var(--border)) !important; }
 .recharts-cartesian-axis-tick text { fill: hsl(var(--muted-foreground)) !important; }

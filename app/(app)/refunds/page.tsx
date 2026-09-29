@@ -6,6 +6,7 @@ import { TopBar } from "@/components/shell/topbar";
 import { TableSkeleton } from "@/components/ui/primitives";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
+import { Modal } from "@/components/ui/modal";
 import { money, fmtDate } from "@/lib/format";
 
 type RefundRow = {
@@ -159,19 +160,15 @@ export default function RefundsPage() {
       </div>
 
       {preview?.documentPath && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setPreview(null)}>
-          <div
-            className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-border"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal onClose={() => setPreview(null)} className="max-w-4xl" layerClassName="z-[70]" backdropClassName="bg-black/60 backdrop-blur-sm">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between">
               <div>
-                <div className="text-[14px] font-bold text-foreground">{preview.guestName}</div>
+                <h2 className="text-[14px] font-bold text-foreground">{preview.guestName}</h2>
                 <div className="text-[11px] text-muted-foreground">{preview.documentName}</div>
               </div>
-              <button onClick={() => setPreview(null)} className="p-1.5 rounded-lg hover:bg-muted"><X size={16} /></button>
+              <button type="button" onClick={() => setPreview(null)} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted"><X size={16} /></button>
             </div>
-            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-muted/30 min-h-[300px]">
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-muted/30 min-h-[200px] sm:min-h-[300px]">
               {/\.(jpg|jpeg|png|webp)$/i.test(preview.documentPath) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview.documentPath} alt={preview.documentName} className="max-w-full max-h-[75vh] object-contain rounded-lg" />
@@ -184,8 +181,7 @@ export default function RefundsPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

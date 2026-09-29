@@ -24,6 +24,7 @@ import {
 } from "@/lib/meters";
 import type { MeterCellDto, MeterRowDto, MetersBoardDto } from "@/lib/meters.server";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Modal as BaseModal } from "@/components/ui/modal";
 
 type Props = {
   hotelId: string;
@@ -727,21 +728,21 @@ function Modal({
   wide?: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
-      <div
-        className={`bg-card rounded-t-2xl sm:rounded-xl border border-border w-full shadow-xl max-h-[92vh] overflow-auto ${
-          wide ? "sm:max-w-lg" : "sm:max-w-md"
-        }`}
-      >
+    <BaseModal
+      onClose={onClose}
+      className={wide ? "sm:max-w-lg" : "sm:max-w-md"}
+      backdropClassName="bg-black/40"
+      closeOnBackdrop={false}
+      sheetOnMobile
+    >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border sticky top-0 bg-card z-10">
           <h3 className="text-[14px] font-bold">{title}</h3>
-          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-muted">
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1 rounded hover:bg-muted">
             <X size={18} />
           </button>
         </div>
         <div className="p-4">{children}</div>
-      </div>
-    </div>
+    </BaseModal>
   );
 }
 
@@ -781,8 +782,7 @@ function DetailSheet({
   const cfg = METER_TYPE_CONFIG[meter.meterType];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
-      <div className="bg-card w-full sm:max-w-md sm:rounded-xl border border-border shadow-xl max-h-[94vh] overflow-auto rounded-t-2xl">
+    <BaseModal onClose={onClose} className="sm:max-w-md" backdropClassName="bg-black/40" closeOnBackdrop={false} sheetOnMobile>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border sticky top-0 bg-card z-10">
           <div>
             <h3 className="text-[14px] font-bold">{meter.zoneName}</h3>
@@ -790,7 +790,7 @@ function DetailSheet({
               {formatPeriodLabel(period)} · {cfg.label}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-muted">
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1 rounded hover:bg-muted">
             <X size={18} />
           </button>
         </div>
@@ -923,13 +923,12 @@ function DetailSheet({
             {busy ? <Loader2 size={16} className="animate-spin mx-auto" /> : "Сохранить"}
           </button>
         </div>
-      </div>
 
       {preview && (
         <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
           <img src={preview} alt="" className="max-w-full max-h-full object-contain rounded-lg" />
         </div>
       )}
-    </div>
+    </BaseModal>
   );
 }

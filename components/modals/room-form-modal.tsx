@@ -7,6 +7,7 @@ import { ROOM_STATUS, DORM_GENDER_LABELS, ROOM_KIND_LABELS } from "@/lib/constan
 import { findDuplicateBedNumbers, normalizeBedNumbers } from "@/lib/bed-numbers";
 import type { DormGender, Room, RoomKind, RoomStatus } from "@/lib/types";
 import { Select } from "@/components/ui/select";
+import { Modal } from "@/components/ui/modal";
 
 interface Props {
   room?: Room | null;
@@ -47,12 +48,10 @@ export function RoomFormModal({ room, defaultHotelId, onClose }: Props) {
 
   if (!canWrite) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-        <div className="bg-card rounded-2xl shadow-2xl w-full max-w-sm border border-border p-6 text-center" onClick={(e) => e.stopPropagation()}>
+      <Modal onClose={onClose} className="max-w-sm p-6 text-center" ariaLabel="Недостаточно прав">
           <p className="text-sm text-muted-foreground">Недостаточно прав для редактирования номеров</p>
           <button onClick={onClose} className="mt-4 px-4 py-2 text-sm font-bold rounded-xl border border-border">Закрыть</button>
-        </div>
-      </div>
+      </Modal>
     );
   }
 
@@ -191,13 +190,12 @@ export function RoomFormModal({ room, defaultHotelId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md border border-border max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} className="max-w-md">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border sticky top-0 bg-card z-10">
           <h2 className="text-[15px] font-black text-foreground">
             {isEdit ? `${ROOM_KIND_LABELS[room!.kind] ?? "Номер"} ${room!.kind === "dorm" ? room!.number : `№${room!.number}`}` : "Новый объект"}
           </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3">
           <div>
@@ -307,7 +305,6 @@ export function RoomFormModal({ room, defaultHotelId, onClose }: Props) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

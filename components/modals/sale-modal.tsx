@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { X, Plus, Minus, Check, ShoppingBag, Receipt } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { OperationDateField } from "@/components/ui/operation-date-field";
+import { Modal } from "@/components/ui/modal";
 import { PaymentMethodPicker, type PaymentSelection } from "@/components/payments/payment-method-picker";
 import { sumSplitParts } from "@/lib/payment-split";
 import { money } from "@/lib/format";
@@ -115,15 +116,11 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-2xl shadow-2xl flex flex-col w-full max-w-[560px] border border-border max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-[560px]">
         <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[15px] font-bold text-foreground">Касса</h2>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
+            <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
           </div>
           <div className="flex gap-2">
             <button
@@ -143,7 +140,7 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           {!activeHotelId && (
             <p className="text-[12px] text-warning font-semibold p-3 rounded-xl bg-warning/10 border border-warning/30">
               Выберите конкретный отель в переключателе
@@ -261,7 +258,6 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
             {busy ? "Проведение…" : mode === "expense" ? "Списать расход" : "Оформить продажу"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

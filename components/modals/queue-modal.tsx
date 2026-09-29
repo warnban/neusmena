@@ -9,6 +9,7 @@ import { mskDateKey } from "@/lib/msk-time";
 import type { Booking } from "@/lib/types";
 import { CheckInModal } from "@/components/modals/check-in-modal";
 import { BookingModal } from "@/components/modals/booking-modal";
+import { Modal } from "@/components/ui/modal";
 
 export function QueueModal({
   mode,
@@ -58,19 +59,15 @@ export function QueueModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-        <div
-          className="bg-card rounded-2xl shadow-2xl flex flex-col w-full max-w-[520px] border border-border max-h-[85vh]"
-          onClick={(e) => e.stopPropagation()}
-        >
+      <Modal onClose={onClose} className="max-w-[520px]">
           <div className="px-5 py-4 flex items-center justify-between border-b border-border">
             <div>
               <h2 className="text-[15px] font-bold text-foreground">{title}</h2>
               <p className="text-[12px] text-muted-foreground">{fmtDate(TODAY)} · {list.length} гостей</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
+            <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2 custom-scrollbar">
             {list.map((b) => {
               const room = rooms.find((r) => r.id === b.roomId);
               const due = mode === "payment" ? paymentDueInfo(b, mskDateKey(), scopedTxns) : null;
@@ -132,8 +129,7 @@ export function QueueModal({
               </p>
             )}
           </div>
-        </div>
-      </div>
+      </Modal>
       {checkInBooking && (
         <CheckInModal booking={checkInBooking} onClose={() => setCheckInBooking(null)} onDone={onClose} />
       )}

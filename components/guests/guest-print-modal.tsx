@@ -8,6 +8,7 @@ import {
   STAY_AMENDMENT_FORM_ID,
   type GuestFormId,
 } from "@/lib/guest-print-forms";
+import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 
 type PreviewBooking = {
@@ -97,22 +98,18 @@ export function GuestPrintModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-lg border border-border max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-lg" layerClassName="z-[70]" backdropClassName="bg-black/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <FileText size={16} className="text-primary flex-shrink-0" />
             <h2 className="text-[14px] font-bold truncate">{meta.label}</h2>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted">
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted">
             <X size={16} />
           </button>
         </div>
 
-        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-4">
           {isAmendment ? (
             <p className="text-[13px] text-muted-foreground text-center py-6">
               Дополнительное соглашение формируется автоматически при изменении срока проживания в карточке брони.
@@ -193,8 +190,7 @@ export function GuestPrintModal({
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, ArrowRightLeft, Search, BedDouble } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
+import { Modal } from "@/components/ui/modal";
 import { DORM_GENDER_LABELS } from "@/lib/constants";
 import { guestGenderMatchesDorm } from "@/lib/dorm";
 import { fmtDate, inits } from "@/lib/format";
@@ -211,11 +212,7 @@ export function RelocateModal({ onClose }: { onClose: () => void }) {
     : selectedTarget?.number;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-2xl shadow-2xl flex flex-col w-full max-w-[520px] border border-border max-h-[85vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-[520px]">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border">
           <div>
             <h2 className="text-[15px] font-bold text-foreground flex items-center gap-2">
@@ -223,10 +220,10 @@ export function RelocateModal({ onClose }: { onClose: () => void }) {
             </h2>
             <p className="text-[12px] text-muted-foreground">Выберите гостя, комнату и койку (для общих комнат)</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           {hotelId === "all" && !activeHotelId && (
             <p className="text-[12px] text-destructive font-semibold">Выберите конкретный отель в меню слева</p>
           )}
@@ -379,7 +376,6 @@ export function RelocateModal({ onClose }: { onClose: () => void }) {
             {busy ? "Переселение…" : "Переселить"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

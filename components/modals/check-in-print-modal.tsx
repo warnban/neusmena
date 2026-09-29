@@ -8,6 +8,7 @@ import {
   buildGuestFormsPrintUrl,
   type GuestFormId,
 } from "@/lib/guest-print-forms";
+import { Modal } from "@/components/ui/modal";
 
 type FormStatus = {
   id: GuestFormId;
@@ -114,14 +115,7 @@ export function CheckInPrintModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-lg border border-border max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-lg" layerClassName="z-[65]" backdropClassName="bg-black/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <FileText size={16} className="text-primary flex-shrink-0" />
@@ -130,12 +124,12 @@ export function CheckInPrintModal({
               <p className="text-[11px] text-muted-foreground truncate">{guestName}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted">
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted">
             <X size={16} />
           </button>
         </div>
 
-        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+        <div className="p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-4">
           <p className="text-[12px] text-muted-foreground">
             Распечатайте документы для подписания гостем, затем перейдите к оплате.
           </p>
@@ -210,7 +204,6 @@ export function CheckInPrintModal({
             <ArrowRight size={14} />
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

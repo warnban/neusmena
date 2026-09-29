@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import type { Organization } from "@/lib/types";
+import { Modal } from "@/components/ui/modal";
 
 export function OrganizationFormModal({
   org,
@@ -68,20 +69,16 @@ export function OrganizationFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-lg border border-border"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-lg" layerClassName="z-[70]" backdropClassName="bg-black/50 backdrop-blur-sm">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-[15px] font-bold text-foreground">
             {org ? "Редактировать организацию" : "Новая организация"}
           </h2>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted">
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted">
             <X size={16} />
           </button>
         </div>
-        <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto custom-scrollbar">
+        <div className="p-5 space-y-3 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
           <div>
             <label className="text-[11px] font-bold text-muted-foreground uppercase">Название *</label>
             <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mt-1 px-3 py-2 text-[13px] rounded-xl border border-border bg-muted outline-none" />
@@ -125,7 +122,6 @@ export function OrganizationFormModal({
             {busy ? "Сохранение…" : "Сохранить"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

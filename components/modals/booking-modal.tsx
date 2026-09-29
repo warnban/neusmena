@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Modal } from "@/components/ui/modal";
 import { Icon } from "@/components/icon";
 import { money, fmtDate, inits } from "@/lib/format";
 import { BOOKING_ST } from "@/lib/constants";
@@ -172,11 +173,7 @@ export function BookingModal({
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4" onClick={onClose}>
-      <div
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col w-full max-w-[720px] border border-border max-h-[92dvh] sm:max-h-[92vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} className="max-w-[720px]" sheetOnMobile>
         <div className="px-6 py-4 flex items-start justify-between border-b border-border">
           <div>
             <div className="flex items-center gap-2.5 mb-1">
@@ -188,7 +185,7 @@ export function BookingModal({
               {fmtDate(live.checkIn, true)} {String(live.checkInHour).padStart(2, "0")}:00 → {fmtDate(live.checkOut, true)} {String(live.checkOutHour).padStart(2, "0")}:00 · {nights} ночей
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted"><X size={16} /></button>
         </div>
 
         <div className="flex px-6 gap-1 border-b border-border">
@@ -197,7 +194,7 @@ export function BookingModal({
           <TabBtn id="history" label="История" />
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
           {tab === "details" && (
             <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-border">
               <div className="p-6 space-y-4">
@@ -344,8 +341,7 @@ export function BookingModal({
             <button className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg bg-muted text-muted-foreground hover:text-foreground"><Edit2 size={12} /> Изменить</button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
     {checkInOpen && (
       <CheckInModal
         booking={live}

@@ -8,6 +8,7 @@ import { useApp } from "@/components/providers/app-data";
 import { GuestFormFields } from "@/components/forms/guest-form-fields";
 import { DocumentScanUpload } from "@/components/forms/document-scan-upload";
 import { Icon } from "@/components/icon";
+import { Modal } from "@/components/ui/modal";
 import { fmtDate, dayDiff } from "@/lib/format";
 import {
   guestToForm,
@@ -112,11 +113,14 @@ export function CheckInModal({
 
   return (
     <>
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={modalLocked ? undefined : onClose}>
-      <div
-        className="bg-card rounded-2xl shadow-2xl flex flex-col w-full max-w-[760px] border border-border max-h-[94vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal
+      onClose={onClose}
+      className="max-w-[760px]"
+      layerClassName="z-[60]"
+      backdropClassName="bg-black/50 backdrop-blur-sm"
+      closeOnBackdrop={!modalLocked}
+      closeOnEscape={!modalLocked}
+    >
         <div className="px-6 py-4 flex items-start justify-between border-b border-border bg-muted/30 rounded-t-2xl">
           <div>
             <div className="flex items-center gap-2.5 mb-1 flex-wrap">
@@ -132,7 +136,7 @@ export function CheckInModal({
               Форма №5 · {fmtDate(booking.checkIn)} — {fmtDate(booking.checkOut)} · {nights} ночей
             </p>
           </div>
-          <button onClick={modalLocked ? undefined : onClose} disabled={modalLocked} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-40"><X size={16} /></button>
+          <button type="button" onClick={modalLocked ? undefined : onClose} disabled={modalLocked} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-40"><X size={16} /></button>
         </div>
 
         <div className="flex px-6 border-b border-border">
@@ -155,7 +159,7 @@ export function CheckInModal({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 custom-scrollbar">
           {tab === "card" && (
             <div className="space-y-4">
               <div className="flex items-start gap-3 p-3.5 rounded-xl text-[12px] bg-accent border border-primary/20">
@@ -277,8 +281,7 @@ export function CheckInModal({
             Закрыть
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
     {printOpen && (
       <CheckInPrintModal
         guestId={guest.id}

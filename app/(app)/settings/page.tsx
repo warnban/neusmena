@@ -12,6 +12,7 @@ import { SalarySettingsEditor } from "@/components/settings/salary-settings-edit
 import { NetworkFaqEditor } from "@/components/settings/network-faq-editor";
 import { PurgeImportPanel } from "@/components/settings/purge-import-panel";
 import { Select } from "@/components/ui/select";
+import { Modal as BaseModal } from "@/components/ui/modal";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Владелец",
@@ -33,15 +34,13 @@ interface PendingInvite {
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg border border-border" onClick={(e) => e.stopPropagation()}>
+    <BaseModal onClose={onClose} className="max-w-lg">
         <div className="px-5 py-4 flex items-center justify-between border-b border-border">
           <h2 className="text-[15px] font-black text-foreground">{title}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X size={16} /></button>
         </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
+        <div className="p-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">{children}</div>
+    </BaseModal>
   );
 }
 
