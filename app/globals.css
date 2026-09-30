@@ -201,8 +201,3 @@
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
 }
-
-/* Превью на лендинге — только демонстрация, без интеракций */
-.landing-preview-root .app-bottom-nav {
-  display: none;
-}

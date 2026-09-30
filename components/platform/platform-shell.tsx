@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard, Building2, Users, LogOut, Shield, ClipboardList,
+  LayoutDashboard, Building2, Users, LogOut, Shield,
 } from "lucide-react";
 
 const NAV = [
   { href: "/platform", label: "Обзор", icon: LayoutDashboard, exact: true },
-  { href: "/platform/orders", label: "Заявки", icon: ClipboardList },
   { href: "/platform/seats", label: "Сети и отели", icon: Building2 },
   { href: "/platform/users", label: "Пользователи", icon: Users },
 ];
@@ -31,7 +30,7 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
             <Shield size={18} className="text-violet-400" />
             <div>
               <p className="text-xs font-black">Platform Dev</p>
-              <p className="text-[10px] text-slate-500">dev.domen.ru</p>
+              <p className="text-[10px] text-slate-500">Панель разработчика</p>
             </div>
           </div>
         </div>
@@ -52,9 +51,6 @@ export function PlatformShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="p-3 border-t border-slate-800 space-y-1">
-          <Link href="/" className="block px-3 py-2 text-[11px] text-slate-500 hover:text-slate-300">
-            ← Лендинг
-          </Link>
           <Link href="/login" className="block px-3 py-2 text-[11px] text-slate-500 hover:text-slate-300">
             CRM (app)
           </Link>

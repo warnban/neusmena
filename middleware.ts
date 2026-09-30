@@ -6,24 +6,20 @@ import {
   PLATFORM_DEV_COOKIE,
   verifyPlatformDevToken,
 } from "@/lib/platform-dev-token";
-import { resolveAppZone } from "@/lib/host-routing";
 
 const CRM_PUBLIC_API = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/health",
-  "/api/access/orders",
   "/api/auth/register/staff",
   "/api/auth/verify-email",
 ];
 function isPublicCrmPage(pathname: string): boolean {
   if (pathname === "/login") return true;
-  if (pathname.startsWith("/get-access")) return true;
   if (pathname.startsWith("/verify-email")) return true;
   if (pathname.startsWith("/register/staff")) return true;
   return false;
 }
-const LANDING_PUBLIC_API = ["/api/landing/bootstrap"];
 const PLATFORM_PUBLIC = ["/platform/login"];
 const PLATFORM_PUBLIC_API = ["/api/platform/auth/login", "/api/platform/auth/logout"];
 
@@ -95,7 +91,7 @@ export async function middleware(request: NextRequest) {
       /* invalid token */
     }
     if (!crmValid && crmToken) {
-      const res = isPublicPage || pathname === "/"
+      const res = isPublicPage
         ? NextResponse.next()
         : NextResponse.redirect(new URL("/login", request.url));
       res.cookies.delete("auth-token");
@@ -103,30 +99,14 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (LANDING_PUBLIC_API.some((p) => pathname.startsWith(p))) return NextResponse.next();
   if (isPublicApi) return NextResponse.next();
-  if (pathname.startsWith("/landing-preview")) return NextResponse.next();
-  if (pathname === "/register") {
-    return NextResponse.redirect(new URL("/get-access", request.url));
-  }
 
-  // Лендинг (domen.ru / localhost) — главная всегда публичная.
-  // Редирект на dashboard только на CRM-хосте (app.*).
-  if (pathname === "/") {
-    const zone = resolveAppZone(request.headers.get("host") ?? "", pathname);
-    if (zone === "crm") {
-      if (crmValid) return NextResponse.redirect(new URL("/dashboard", request.url));
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-    return NextResponse.next();
+  if (pathname === "/" || pathname === "/register") {
+    return NextResponse.redirect(new URL(crmValid ? "/dashboard" : "/login", request.url));
   }
 
   if (!crmValid && !isPublicPage && isCrmAppPath(pathname)) {
     return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  if (crmValid && pathname === "/register") {
-    return NextResponse.redirect(new URL("/get-access", request.url));
   }
 
   if (

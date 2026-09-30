@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { money } from "@/lib/format";
+import { CreateOwnerForm } from "@/components/platform/create-owner-form";
 
 type HotelRow = {
   id: string;
@@ -87,6 +88,8 @@ export default function PlatformSeatsPage() {
         <h1 className="text-2xl font-black text-white">Сети и отели</h1>
         <p className="text-sm text-slate-500 mt-1">AI Premium включается отдельно для каждого отеля (только сети с тарифом Premium)</p>
       </div>
+
+      <CreateOwnerForm onCreated={load} />
 
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
@@ -59,12 +58,6 @@ export default function LoginPage() {
             {loading ? "Вход…" : "Войти"}
           </button>
         </form>
-        <p className="text-center text-sm text-muted-foreground mt-6">
-          Нет доступа?{" "}
-          <Link href="/get-access" className="text-primary font-semibold hover:underline">
-            Оформить подписку
-          </Link>
-        </p>
       </div>
     </div>
   );

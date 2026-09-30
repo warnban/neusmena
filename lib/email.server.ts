@@ -67,7 +67,7 @@ export async function sendOwnerCredentialsEmail(params: {
   const text = [
     `Здравствуйте, ${name}!`,
     "",
-    `Оплата подтверждена. Создана сеть «${seatName}».`,
+    `Для вас создана сеть «${seatName}».`,
     "",
     `Вход в CRM: ${loginUrl}`,
     `Email: ${to}`,
