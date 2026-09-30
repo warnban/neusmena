@@ -25,7 +25,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
   if (url.pathname.startsWith("/_next/")) return;
   if (url.pathname.startsWith("/icon")) return;
-  if (url.pathname.startsWith("/apple-icon")) return;
+  if (url.pathname.startsWith("/apple-touch-icon")) return;
   if (request.mode !== "navigate") return;
 
   event.respondWith(

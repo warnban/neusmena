@@ -4,15 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { assertHotelWrite } from "@/lib/permissions";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
-import { findAvailableRooms } from "@/lib/booking-availability.server";
-import { guestGenderMatchesDorm, setBedStatus, formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
-import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel, startOfDay } from "@/lib/housekeeping";
-import { mskDateKey } from "@/lib/msk-time";
+import { setBedStatus } from "@/lib/dorm.server";
+import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel } from "@/lib/housekeeping";
 import {
   assertPaymentOperationAllowed,
   resolveTransactionDateInput,
 } from "@/lib/transaction-date.server";
 import { performCheckIn, type PerformCheckInInput } from "@/lib/checkin.server";
+import { relocateBooking } from "@/lib/booking-relocate.server";
 import type { GuestFormData } from "@/lib/guest-form";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -67,104 +66,20 @@ export async function executeRelocate(
   session: SessionPayload,
   payload: Record<string, unknown>
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
-  const bookingId = String(payload.bookingId ?? "");
-  const newRoomId = String(payload.newRoomId ?? "");
-  const newBedIdIn = payload.newBedId ? String(payload.newBedId) : null;
-
-  const auth = await assertBookingWrite(session, bookingId);
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  const booking = auth.booking;
-  const today = startOfDay(new Date());
-  if (booking.status !== "checkedin" || booking.checkOut < today) {
-    return { ok: false, error: "Гость не проживает в отеле" };
-  }
-
-  if (!newRoomId) return { ok: false, error: "Выберите номер для переселения" };
-
-  const newRoom = await prisma.room.findFirst({
-    where: { id: newRoomId, hotelId: booking.hotelId },
-    include: { beds: true },
+  const result = await relocateBooking(session, {
+    bookingId: String(payload.bookingId ?? ""),
+    newRoomId: String(payload.newRoomId ?? ""),
+    newBedId: payload.newBedId ? String(payload.newBedId) : null,
+    keepPrice: payload.keepPrice === true,
   });
-  if (!newRoom) return { ok: false, error: "Номер не найден" };
+  if (!result.ok) return { ok: false, error: result.error };
 
-  const guest = await prisma.guest.findUnique({ where: { id: booking.guestId } });
-  const oldRoomId = booking.roomId;
-  const oldBedId = booking.bedId;
-  const checkInKey = mskDateKey(booking.checkIn);
-  const checkOutKey = mskDateKey(booking.checkOut);
-
-  const available = await findAvailableRooms({
-    hotelId: booking.hotelId,
-    checkIn: checkInKey,
-    checkOut: checkOutKey,
-    guestGender: guest?.gender ?? null,
-    limit: 200,
-  });
-
-  let targetBedId: string | null = null;
-
-  if (newRoom.kind === "dorm") {
-    if (!guestGenderMatchesDorm(guest?.gender, newRoom.dormGender)) {
-      return { ok: false, error: "Пол гостя не подходит для общей комнаты" };
-    }
-    const slotsInRoom = available.rooms.filter((s) => s.roomId === newRoomId && s.bedId);
-    if (!slotsInRoom.length) return { ok: false, error: "Нет свободных койко-мест" };
-    if (newBedIdIn) {
-      if (!slotsInRoom.some((s) => s.bedId === newBedIdIn)) {
-        return { ok: false, error: "Койко-место занято" };
-      }
-      targetBedId = newBedIdIn;
-    } else {
-      const pick = slotsInRoom.find((s) => s.bedId !== oldBedId);
-      if (!pick?.bedId) return { ok: false, error: "Выберите свободную койку" };
-      targetBedId = pick.bedId;
-    }
-  } else {
-    if (!available.rooms.some((s) => s.roomId === newRoomId && !s.bedId)) {
-      return { ok: false, error: `Номер ${newRoom.number} занят` };
-    }
-  }
-
-  const oldBed = oldBedId ? await prisma.bed.findUnique({ where: { id: oldBedId } }) : null;
-  const newBed = targetBedId ? newRoom.beds.find((b) => b.id === targetBedId) : null;
-  const oldRoomNumber = formatHkPlaceLabel(booking.room.number, oldBed?.label);
-  const newPlaceLabel = newBed
-    ? formatDormPlaceLabel(newRoom.number, newBed.label)
-    : newRoom.number;
-
-  await prisma.$transaction([
-    prisma.booking.update({
-      where: { id: booking.id },
-      data: { roomId: newRoomId, bedId: targetBedId },
-    }),
-    prisma.hkTask.create({
-      data: {
-        hotelId: booking.hotelId,
-        roomId: oldRoomId,
-        bedId: oldBedId,
-        bookingId: booking.id,
-        roomNumber: oldRoomNumber,
-        type: HK_CATEGORY_TYPES.relocation,
-        category: "relocation",
-        assignee: "—",
-        priority: "high",
-        status: "pending",
-        time: hkTimeNow(),
-        est: "60 мин",
-      },
-    }),
-  ]);
-
-  if (oldBedId) await setBedStatus(oldBedId, "cleaning");
-  else await prisma.room.update({ where: { id: oldRoomId }, data: { status: "cleaning" } });
-
-  if (targetBedId) await setBedStatus(targetBedId, "occupied");
-  else await prisma.room.update({ where: { id: newRoomId }, data: { status: "occupied" } });
-
+  const priceText = result.amountDelta
+    ? ` Стоимость: ${result.amount} ₽ (${result.amountDelta > 0 ? "+" : ""}${result.amountDelta} ₽)`
+    : "";
   return {
     ok: true,
-    message: `${booking.guestName} переселён: ${oldRoomNumber} → ${newPlaceLabel}`,
+    message: `${result.guestName} ${result.staying ? "переселён" : "— место по брони изменено"}: ${result.fromRoom} → ${result.toRoom}.${priceText}`,
   };
 }
 

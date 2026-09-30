@@ -67,8 +67,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         excludeBookingId: booking.id,
       });
       if (conflict) {
+        const blocking = await prisma.booking.findFirst({
+          where: {
+            hotelId: booking.hotelId,
+            id: { not: booking.id },
+            status: { in: ["new", "confirmed"] },
+            checkIn: { lt: parseMskDateKey(newCheckOutKey) },
+            checkOut: { gt: parseMskDateKey(prevCheckOutKey) },
+            ...(booking.bedId ? { bedId: booking.bedId } : { bedId: null, roomId: booking.roomId }),
+          },
+          orderBy: { checkIn: "asc" },
+          select: { id: true, guestName: true, checkIn: true },
+        });
         return NextResponse.json(
-          { error: "На эти даты уже есть другая бронь или размещение организации" },
+          {
+            error: blocking
+              ? `Место занято: с ${mskDateKey(blocking.checkIn).split("-").reverse().join(".")} забронировано гостем ${blocking.guestName}`
+              : "На эти даты уже есть другая бронь или размещение организации",
+            blockingBooking: blocking
+              ? { id: blocking.id, guestName: blocking.guestName, checkIn: blocking.checkIn }
+              : null,
+          },
           { status: 409 }
         );
       }

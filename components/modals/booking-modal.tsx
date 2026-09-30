@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   X, Phone, Mail, Star, UserCheck, LogOut,
-  FileText, Edit2, CalendarClock,
+  FileText, Edit2, CalendarClock, ArrowRightLeft,
 } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -23,6 +23,7 @@ import { GuestFlagBadges, GuestFlagWarning } from "@/components/guests/guest-fla
 import { filterBookingTransactions, filterGuestTransactions } from "@/lib/guest-payments";
 import { StayAmendmentPrintModal } from "@/components/modals/stay-amendment-print-modal";
 import type { StayAmendmentPrevious } from "@/lib/guest-print-forms";
+import { RelocateModal } from "@/components/modals/relocate-modal";
 
 export function BookingModal({
   booking,
@@ -35,7 +36,7 @@ export function BookingModal({
   initialTab?: "details" | "payment" | "history";
   openStayChange?: boolean;
 }) {
-  const { rooms, guests, bookings, transactions, pmConfig, refresh, getCategoryLabel, sourceConfig } = useApp();
+  const { rooms, beds, guests, bookings, transactions, pmConfig, refresh, getCategoryLabel, sourceConfig } = useApp();
   const live = useMemo(() => bookings.find((b) => b.id === booking.id) ?? booking, [bookings, booking]);
 
   const [tab, setTab] = useState<"details" | "payment" | "history">(initialTab);
@@ -45,7 +46,11 @@ export function BookingModal({
   const [busy, setBusy] = useState(false);
 
   const room = rooms.find((r) => r.id === live.roomId);
+  const bed = live.bedId ? beds.find((b) => b.id === live.bedId) : null;
   const guest = guests.find((g) => g.id === live.guestId);
+  const [relocateId, setRelocateId] = useState<string | null>(null);
+  const [blockingBooking, setBlockingBooking] = useState<{ id: string; guestName: string } | null>(null);
+  const [stayInfo, setStayInfo] = useState("");
   const nights = mskNightDiff(live.checkIn, live.checkOut);
   const src = sourceStyle(sourceConfig, live.source);
 
@@ -124,6 +129,8 @@ export function BookingModal({
     }
     setBusy(true);
     setActionError("");
+    setBlockingBooking(null);
+    setStayInfo("");
     try {
       const res = await fetch(`/api/bookings/${live.id}/extend`, {
         method: "POST",
@@ -133,6 +140,7 @@ export function BookingModal({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setActionError(String(data.error ?? "Не удалось изменить срок"));
+        if (data.blockingBooking?.id) setBlockingBooking(data.blockingBooking);
         return;
       }
       setStayChangeOpen(false);
@@ -228,7 +236,7 @@ export function BookingModal({
                     ["Заезд", `${fmtDate(live.checkIn)} · ${String(live.checkInHour).padStart(2, "0")}:00`],
                     ["Выезд", `${fmtDate(live.checkOut)} · ${String(live.checkOutHour).padStart(2, "0")}:00`],
                     ["Ночей", String(nights)],
-                    ["Номер", `№${room?.number} · ${room ? getCategoryLabel(room.category) : ""}`],
+                    ["Номер", bed ? `койка ${bed.label} · комн. ${room?.number ?? ""}` : `№${room?.number} · ${room ? getCategoryLabel(room.category) : ""}`],
                     ["Гостей", `${live.guests} чел.`],
                     ["Тариф", room ? `${money(room.price)}/н` : "—"],
                   ].map(([l, v], i) => (
@@ -237,6 +245,12 @@ export function BookingModal({
                     </div>
                   ))}
                 </div>
+                {live.notes && (
+                  <div>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Комментарий</p>
+                    <p className="text-[12px] text-foreground/80 whitespace-pre-line rounded-lg bg-muted/50 border border-border px-3 py-2">{live.notes}</p>
+                  </div>
+                )}
                 {canChangeStatus ? (
                   <div>
                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Статус</p>
@@ -268,6 +282,16 @@ export function BookingModal({
                     {actionError && stayChangeOpen && (
                       <p className="text-[11px] text-destructive font-semibold">{actionError}</p>
                     )}
+                    {blockingBooking && (
+                      <button
+                        type="button"
+                        onClick={() => setRelocateId(blockingBooking.id)}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 text-[12px] font-bold rounded-lg border border-primary text-primary hover:bg-accent"
+                      >
+                        <ArrowRightLeft size={13} /> Перенести бронь {blockingBooking.guestName} на другое место
+                      </button>
+                    )}
+                    {stayInfo && <p className="text-[11px] text-success font-semibold">{stayInfo}</p>}
                     <button onClick={submitStayChange} disabled={busy} className="w-full py-2 text-white text-[12px] font-bold rounded-lg bg-primary hover:opacity-90 disabled:opacity-50">Сохранить</button>
                   </div>
                 )}
@@ -312,6 +336,15 @@ export function BookingModal({
               <UserCheck size={13} /> Заселить
             </button>
           )}
+          {(live.status === "new" || live.status === "confirmed" || live.status === "checkedin") && (
+            <button
+              onClick={() => setRelocateId(live.id)}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-[12px] font-bold rounded-lg border border-border text-foreground hover:bg-muted disabled:opacity-50"
+            >
+              <ArrowRightLeft size={13} /> {live.status === "checkedin" ? "Переселить" : "Сменить место"}
+            </button>
+          )}
           {live.status === "checkedin" && (
             <>
               <button onClick={() => call(`/api/bookings/${live.id}/checkout`)} disabled={busy} className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[12px] font-bold rounded-lg shadow-sm hover:opacity-90 disabled:opacity-50" style={{ background: "hsl(var(--primary))" }}>
@@ -347,6 +380,19 @@ export function BookingModal({
         booking={live}
         onClose={() => setCheckInOpen(false)}
         onDone={() => { setCheckInOpen(false); onClose(); }}
+      />
+    )}
+    {relocateId && (
+      <RelocateModal
+        initialBookingId={relocateId}
+        onClose={() => setRelocateId(null)}
+        onDone={() => {
+          if (relocateId === blockingBooking?.id) {
+            setBlockingBooking(null);
+            setActionError("");
+            setStayInfo("Бронь перенесена — теперь сохраните новый срок проживания");
+          }
+        }}
       />
     )}
     {amendmentPrint && live.guestId && (

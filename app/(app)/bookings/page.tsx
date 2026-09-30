@@ -169,7 +169,7 @@ export default function BookingsPage() {
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <div className="tabular text-[13px] font-semibold text-foreground">{money(b.amount)}</div>
-                        {debt > 0 && <div className="tabular text-[11px] font-medium text-destructive">−{money(debt)}</div>}
+                        {debt > 0 && <div className="tabular text-[11px] font-medium text-destructive">к оплате {money(debt)}</div>}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <button
@@ -252,8 +252,8 @@ export default function BookingsPage() {
                 </div>
                 {debt > 0 && (
                   <div className="flex items-center justify-between text-[13px]">
-                    <span className="text-muted-foreground">Долг</span>
-                    <span className="tabular font-semibold text-destructive">−{money(debt)}</span>
+                    <span className="text-muted-foreground">К оплате</span>
+                    <span className="tabular font-semibold text-destructive">{money(debt)}</span>
                   </div>
                 )}
               </div>

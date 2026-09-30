@@ -15,6 +15,7 @@ import { runAssistantTool } from "@/lib/assistant/tools.server";
 import type { PendingAction } from "@/lib/assistant/types";
 import type { SessionPayload } from "@/lib/auth";
 import { findAvailableRooms } from "@/lib/booking-availability.server";
+import { relocationPricing } from "@/lib/booking-relocation";
 import { formatDormPlaceLabel } from "@/lib/dorm";
 import { fmtDate } from "@/lib/format";
 import { mskDateKey } from "@/lib/msk-time";
@@ -140,7 +141,8 @@ export const HAMSTER_EXTRA_TOOLS = [
     type: "function" as const,
     function: {
       name: "propose_relocate",
-      description: "Предложить переселение",
+      description:
+        "Предложить переселение проживающего гостя или смену места по брони, которая ещё не заселена",
       parameters: {
         type: "object",
         properties: {
@@ -148,6 +150,10 @@ export const HAMSTER_EXTRA_TOOLS = [
           newRoomId: { type: "string" },
           newBedId: { type: "string" },
           roomNumber: { type: "string" },
+          keepPrice: {
+            type: "boolean",
+            description: "true — не менять стоимость проживания (например, переселение по вине отеля)",
+          },
         },
         required: ["bookingId"],
       },
@@ -371,13 +377,24 @@ export async function runHamsterExtraTool(
           ? formatDormPlaceLabel(newRoom.number, (await prisma.bed.findUnique({ where: { id: newBedId } }))?.label ?? "")
           : newRoom?.number ?? "?";
 
-      const preview = `Переселение: ${booking.guestName}\nИз №${booking.room.number} → №${placeLabel}`;
+      const keepPrice = args.keepPrice === true;
+      const pricing = newRoom
+        ? relocationPricing({ booking, oldRoomPrice: booking.room.price, newRoomPrice: newRoom.price })
+        : null;
+      const priceLine = !pricing || pricing.delta === 0
+        ? "Стоимость не меняется"
+        : keepPrice
+          ? `Стоимость сохраняется: ${booking.amount} ₽`
+          : `Стоимость: ${booking.amount} → ${pricing.newAmount} ₽`;
+
+      const title = booking.status === "checkedin" ? "Переселение" : "Смена места по брони";
+      const preview = `${title}: ${booking.guestName}\nИз №${booking.room.number} → №${placeLabel}\n${priceLine}`;
       return {
         result: { status: "awaiting_confirmation", preview },
         pendingAction: {
           type: "relocate",
           preview,
-          payload: { bookingId: booking.id, newRoomId, newBedId },
+          payload: { bookingId: booking.id, newRoomId, newBedId, keepPrice },
           createdAt: new Date().toISOString(),
         },
       };

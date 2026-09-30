@@ -22,9 +22,10 @@ import { MIG_REG_STATUS } from "@/lib/constants";
 import type { Booking, Guest } from "@/lib/types";
 import { CheckInPaymentModal } from "@/components/modals/check-in-payment-modal";
 import { CheckInPrintModal } from "@/components/modals/check-in-print-modal";
+import { RelocateModal } from "@/components/modals/relocate-modal";
 
 export function CheckInModal({
-  booking,
+  booking: bookingProp,
   onClose,
   onDone,
 }: {
@@ -32,9 +33,13 @@ export function CheckInModal({
   onClose: () => void;
   onDone?: () => void;
 }) {
-  const { guests, rooms, hotels, currentUser, getCategoryLabel, refreshSilent } = useApp();
+  const { guests, rooms, beds, bookings, hotels, currentUser, getCategoryLabel, refreshSilent } = useApp();
+  const booking = bookings.find((b) => b.id === bookingProp.id) ?? bookingProp;
   const guest = guests.find((g) => g.id === booking.guestId);
   const room = rooms.find((r) => r.id === booking.roomId);
+  const bed = booking.bedId ? beds.find((b) => b.id === booking.bedId) : null;
+  const placeLabel = bed ? `койка ${bed.label}` : `№${room?.number ?? ""}`;
+  const [relocateOpen, setRelocateOpen] = useState(false);
   const hotel = hotels.find((h) => h.id === booking.hotelId);
 
   const [tab, setTab] = useState<"card" | "migration">("card");
@@ -125,7 +130,7 @@ export function CheckInModal({
           <div>
             <div className="flex items-center gap-2.5 mb-1 flex-wrap">
               <Shield size={15} className="text-primary" />
-              <h2 className="text-[15px] font-bold text-foreground">Регистрация гостя · №{room?.number}</h2>
+              <h2 className="text-[15px] font-bold text-foreground">Регистрация гостя · {placeLabel}</h2>
               {!signed ? (
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">Не подписана</span>
               ) : (
@@ -200,7 +205,22 @@ export function CheckInModal({
                 </div>
                 <div className="p-3 space-y-1 text-[12px]">
                   <div className="flex justify-between"><span className="text-muted-foreground">Гостиница</span><span className="font-semibold">{hotel?.name}, {hotel?.city}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Номер</span><span className="font-semibold">№{room?.number} · {room ? getCategoryLabel(room.category) : ""}</span></div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-muted-foreground">Номер</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold">
+                        {bed ? `${placeLabel} · комн. ${room?.number ?? ""}` : `${placeLabel} · ${room ? getCategoryLabel(room.category) : ""}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRelocateOpen(true)}
+                        disabled={modalLocked}
+                        className="text-[11px] font-bold text-primary hover:underline disabled:opacity-50"
+                      >
+                        Сменить место
+                      </button>
+                    </span>
+                  </div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Заезд / выезд</span><span className="font-semibold">{fmtDate(booking.checkIn)} — {fmtDate(booking.checkOut)}</span></div>
                 </div>
               </div>
@@ -306,6 +326,9 @@ export function CheckInModal({
         onClose={() => setPaymentOpen(false)}
         onDone={() => { setPaymentOpen(false); onDone?.(); onClose(); }}
       />
+    )}
+    {relocateOpen && (
+      <RelocateModal initialBookingId={booking.id} onClose={() => setRelocateOpen(false)} />
     )}
     </>
   );
