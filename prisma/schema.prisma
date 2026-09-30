@@ -612,8 +612,8 @@ model Booking {
   roomId      String
   bed         Bed?          @relation(fields: [bedId], references: [id])
   bedId       String?
-  guest       Guest         @relation(fields: [guestId], references: [id])
-  guestId     String
+  guest       Guest?        @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  guestId     String?
   guestName   String
   checkIn     DateTime
   checkOut    DateTime

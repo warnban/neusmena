@@ -114,7 +114,7 @@ export default function GuestsPage() {
     const label = [g.lastName, g.firstName, g.middleName].filter(Boolean).join(" ") || g.name;
     if (
       !confirm(
-        `Удалить гостя «${label}» из базы?\n\nДействие необратимо. Удаление возможно только если у гостя нет бронирований.`
+        `Удалить гостя «${label}» из базы?\n\nКарточка, паспортные данные и документы удалятся без возможности восстановления. Прошлые брони и оплаты останутся в истории и отчётах под этим ФИО.`
       )
     ) {
       return;
@@ -149,7 +149,7 @@ export default function GuestsPage() {
     today.setHours(0, 0, 0, 0);
     const ids = new Set<string>();
     for (const b of scopedBookings) {
-      if (b.status === "checkedin" && new Date(b.checkOut) >= today) {
+      if (b.guestId && b.status === "checkedin" && new Date(b.checkOut) >= today) {
         ids.add(b.guestId);
       }
     }
@@ -161,7 +161,7 @@ export default function GuestsPage() {
     today.setHours(0, 0, 0, 0);
     const map = new Map<string, (typeof scopedBookings)[0]>();
     for (const b of scopedBookings) {
-      if (b.status === "checkedin" && new Date(b.checkOut) >= today) {
+      if (b.guestId && b.status === "checkedin" && new Date(b.checkOut) >= today) {
         map.set(b.guestId, b);
       }
     }

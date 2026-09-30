@@ -172,6 +172,7 @@ export default function TasksPage() {
     const stayingGuestIds = new Set<string>();
     const scopedGuestIds = new Set<string>();
     for (const b of scopedBookings) {
+      if (!b.guestId) continue;
       scopedGuestIds.add(b.guestId);
       if (b.status === "checkedin") stayingGuestIds.add(b.guestId);
     }

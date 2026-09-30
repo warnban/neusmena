@@ -176,7 +176,7 @@ export function BookingModal({
 
   const canCancelBooking =
     live.status !== "checkedin" && live.status !== "checkedout" && live.status !== "cancelled";
-  const canUndoCheckout = live.status === "checkedout";
+  const canUndoCheckout = live.status === "checkedout" && Boolean(live.guestId);
   const canChangeStatus = live.status !== "checkedin";
 
   return (
@@ -215,7 +215,9 @@ export function BookingModal({
                       {guest?.vip && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "hsl(var(--vip) / 0.14)", color: "hsl(var(--vip))" }}>VIP</span>}
                       {guest && <GuestFlagBadges guest={guest} className="inline-flex items-center gap-1.5 flex-wrap" />}
                     </div>
-                    <div className="text-[11px] text-muted-foreground">{guest?.visits} визит · {guest?.country}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {guest ? `${guest.visits} визит · ${guest.country}` : "Карточка гостя удалена"}
+                    </div>
                   </div>
                 </div>
                 {guest && <GuestFlagWarning guest={guest} />}

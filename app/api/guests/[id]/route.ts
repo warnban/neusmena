@@ -112,14 +112,20 @@ export async function DELETE(
       where: { id: params.id, seatId: auth.session.seatId },
       include: {
         documents: true,
-        bookings: { where: { status: { not: "cancelled" } }, take: 1 },
+        bookings: { where: { status: { in: ["new", "confirmed", "checkedin"] } }, take: 1 },
       },
     });
     if (!guest) return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
 
     if (guest.bookings.length > 0) {
+      const b = guest.bookings[0]!;
       return NextResponse.json(
-        { error: "Нельзя удалить гостя с бронированиями. Отмените или завершите все бронирования." },
+        {
+          error:
+            b.status === "checkedin"
+              ? "Гость сейчас проживает — сначала выселите его."
+              : "У гостя есть предстоящая бронь — сначала отмените её.",
+        },
         { status: 400 }
       );
     }

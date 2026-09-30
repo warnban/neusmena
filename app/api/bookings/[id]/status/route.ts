@@ -17,6 +17,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!VALID.includes(status)) {
     return NextResponse.json({ error: "Некорректный статус" }, { status: 400 });
   }
+  if (!booking.guestId && (status === "new" || status === "confirmed" || status === "checkedin")) {
+    return NextResponse.json({ error: "Карточка гостя удалена — эту бронь нельзя вернуть в работу" }, { status: 400 });
+  }
   if (booking.status === "checkedin" && status === "cancelled") {
     return NextResponse.json({ error: "Нельзя отменить проживание заселённого гостя" }, { status: 400 });
   }

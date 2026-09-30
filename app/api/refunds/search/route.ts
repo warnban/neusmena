@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
           id: b.id,
           hotelId: b.hotelId,
           hotelName: b.hotel.name,
-          guestName: b.guestName || b.guest.name,
+          guestName: b.guestName || b.guest?.name || "",
           roomNumber: b.room.number,
           checkIn: b.checkIn.toISOString(),
           checkOut: b.checkOut.toISOString(),

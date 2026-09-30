@@ -17,6 +17,9 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     if (booking.status !== "checkedout") {
       return NextResponse.json({ error: "Отменить выселение можно только для выселённого гостя" }, { status: 400 });
     }
+    if (!booking.guestId) {
+      return NextResponse.json({ error: "Карточка гостя удалена — отменить выселение нельзя" }, { status: 400 });
+    }
 
     const openCheckoutTask = await prisma.hkTask.findFirst({
       where: {

@@ -39,7 +39,7 @@ export function QuickLookupModal({ onClose }: { onClose: () => void }) {
     for (const b of bookings) {
       if (b.status !== "checkedin") continue;
       const room = rooms.find((r) => r.id === b.roomId);
-      if (room && room.number.toLowerCase() === q) roomGuestIds.add(b.guestId);
+      if (room && b.guestId && room.number.toLowerCase() === q) roomGuestIds.add(b.guestId);
     }
 
     const g = guests

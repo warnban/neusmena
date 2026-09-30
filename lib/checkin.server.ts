@@ -65,7 +65,7 @@ export async function performCheckIn(
     return { ok: false, error: "Заполните данные гостя" };
   }
 
-  const guest = await prisma.guest.findUnique({ where: { id: booking.guestId } });
+  const guest = booking.guestId ? await prisma.guest.findUnique({ where: { id: booking.guestId } }) : null;
   if (!guest) return { ok: false, error: "Гость не найден" };
 
   const missing = validateCheckInForm({ isForeigner: guest.isForeigner }, input.form);
