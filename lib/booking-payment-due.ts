@@ -95,6 +95,18 @@ export function nightsConsumedThrough(booking: Booking, dateKey = mskDateKey()):
   return Math.max(1, dayDiff(checkIn, today) + 1);
 }
 
+const CHECKOUT_HOUR_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Ночей, которые должны быть оплачены на момент `now`: сутки гостя длятся до 12:00 МСК,
+ * поэтому сегодня до полудня новая ночь ещё не началась.
+ */
+export function nightsDueThrough(booking: Booking, dateKey = mskDateKey(), now = new Date()): number {
+  const effectiveKey = dateKey === mskDateKey(now) ? mskDateKey(new Date(now.getTime() - CHECKOUT_HOUR_MS)) : dateKey;
+  const firstNight = nightsConsumedThrough(booking, dateKey) > 0 ? 1 : 0;
+  return Math.max(firstNight, nightsConsumedThrough(booking, effectiveKey));
+}
+
 /** Сумма оплат проживания за вычетом возвратов: поле брони + активные транзакции (на случай рассинхрона). */
 export function accommodationPaidTotal(
   booking: Pick<Booking, "id" | "paid">,
@@ -187,7 +199,7 @@ export function paymentDueInfo(booking: Booking, dateKey = mskDateKey(), transac
   const effectivePaid = accommodationPaidTotal(booking, transactions);
   const contractBooking = { ...booking, paid: effectivePaid };
   const nightly = bookingNightlyRate(contractBooking);
-  const consumed = nightsConsumedThrough(booking, dateKey);
+  const consumed = nightsDueThrough(booking, dateKey);
   const prepaid = prepaidNights(contractBooking, undefined, transactions);
   const debtNights = isPaymentDueToday(booking, dateKey, transactions) ? Math.max(0, consumed - prepaid) : 0;
   const debt = debtNights * nightly;
@@ -215,7 +227,7 @@ export function isPaymentDueToday(booking: Booking, dateKey = mskDateKey(), tran
   if (checkOutKey <= dateKey) return false;
 
   const totalNights = bookingStayNights(booking);
-  const consumed = nightsConsumedThrough(booking, dateKey);
+  const consumed = nightsDueThrough(booking, dateKey);
   if (consumed >= totalNights) return false;
 
   const effectivePaid = accommodationPaidTotal(booking, transactions);
@@ -234,7 +246,7 @@ export function isPaymentDueSoon(booking: Booking, dateKey = mskDateKey(), trans
   const checkOutKey = mskDateKey(booking.checkOut);
   if (checkOutKey <= dateKey) return false;
 
-  const consumed = nightsConsumedThrough(booking, dateKey);
+  const consumed = nightsDueThrough(booking, dateKey);
   const effectivePaid = accommodationPaidTotal(booking, transactions);
   const prepaid = prepaidNights(booking, effectivePaid, transactions);
   const totalNights = bookingStayNights(booking);
@@ -250,7 +262,7 @@ export function paymentSoonInfo(booking: Booking, dateKey = mskDateKey(), transa
   const effectivePaid = accommodationPaidTotal(booking, transactions);
   const contractBooking = { ...booking, paid: effectivePaid };
   const nightly = bookingNightlyRate(contractBooking);
-  const consumed = nightsConsumedThrough(booking, dateKey);
+  const consumed = nightsDueThrough(booking, dateKey);
   const prepaid = prepaidNights(contractBooking, undefined, transactions);
   const paidThrough = paidThroughDateKey(contractBooking, undefined, transactions);
   const nightsAhead = Math.max(0, prepaid - consumed);
