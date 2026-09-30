@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { calcStayAmount } from "@/lib/booking-pricing";
+import { stayExtrasTotal } from "@/lib/stay-extras";
 import { assertHotelWrite } from "@/lib/permissions";
 import { mskDateKey, mskDayAfter, mskNightDiff, parseMskDateKey } from "@/lib/msk-time";
 import { apiErrorMessage } from "@/lib/api-error";
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       checkOut: newCheckOut,
       discountPercent: booking.discountPercent,
       discountPerNight: booking.discountPerNight,
+      extras: stayExtrasTotal(booking),
     });
 
     const nightDelta = mskNightDiff(booking.checkIn, newCheckOutKey) - mskNightDiff(booking.checkIn, prevCheckOutKey);

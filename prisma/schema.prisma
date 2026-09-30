@@ -628,6 +628,8 @@ model Booking {
   paid        Int           @default(0)
   discountPercent  Int        @default(0)
   discountPerNight Int        @default(0)
+  earlyCheckInFee  Int        @default(0)
+  lateCheckOutFee  Int        @default(0)
   notes       String        @default("")
   checkedOutAt DateTime?
   serviceSales ServiceSale[]
@@ -918,6 +920,7 @@ model Transaction {
   discountPercentApplied  Int?
   discountPerNightApplied Int?
   paymentGroupId          String?
+  stayExtra               String?
 
   @@index([hotelId])
   @@index([date])

@@ -11,6 +11,7 @@ import {
   firstUnpaidNightDateKey,
 } from "@/lib/booking-payment-due";
 import { calcStayAmount } from "@/lib/booking-pricing";
+import { stayExtrasTotal } from "@/lib/stay-extras";
 import { buildRefundQuoteFromContext, canRefundBooking, loadRefundContext } from "@/lib/booking-refund";
 import { mskDateKey, mskNightDiff, mskAddDays, parseMskDateKey } from "@/lib/msk-time";
 import { findAvailableRooms, resolveRoomForBooking } from "@/lib/booking-availability.server";
@@ -479,6 +480,7 @@ export async function runAssistantTool(
         checkOut: newCheckOut,
         discountPercent: booking.discountPercent ?? 0,
         discountPerNight: booking.discountPerNight ?? 0,
+        extras: stayExtrasTotal(booking),
       });
 
       return {

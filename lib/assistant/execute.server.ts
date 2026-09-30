@@ -6,6 +6,7 @@ import { assertHotelWrite } from "@/lib/permissions";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
 import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import { calcStayAmount } from "@/lib/booking-pricing";
+import { stayExtrasTotal } from "@/lib/stay-extras";
 import { formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
 import { resolveRoomForBooking, hasBookingDateOverlap } from "@/lib/booking-availability.server";
 import {
@@ -112,6 +113,7 @@ async function executeRecordPayment(
     checkOut: booking.checkOut,
     discountPercent: booking.discountPercent ?? 0,
     discountPerNight: booking.discountPerNight ?? 0,
+    extras: stayExtrasTotal(booking),
   });
 
   const pricingBooking = { ...booking, amount: useRules ? booking.amount || contractAmount : contractAmount };
@@ -259,6 +261,7 @@ async function executeExtendStay(session: SessionPayload, payload: Record<string
     checkOut: newCheckOut,
     discountPercent: booking.discountPercent,
     discountPerNight: booking.discountPerNight,
+    extras: stayExtrasTotal(booking),
   });
 
   const nightDelta = mskNightDiff(booking.checkIn, newCheckOutKey) - mskNightDiff(booking.checkIn, prevCheckOutKey);

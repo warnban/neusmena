@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
@@ -10,11 +11,17 @@ import {
 } from "@/lib/transaction-date.server";
 import { buildAccommodationPaymentNote } from "@/lib/booking-transaction-notes";
 import { calcStayAmount } from "@/lib/booking-pricing";
+import { stayExtrasTotal, type StayExtraCode } from "@/lib/stay-extras";
 import {
+  allocateStayExtrasFromSplits,
+  resolveRequestedStayExtras,
+  stayExtraTxNote,
+} from "@/lib/stay-extras.server";
+import {
+  bookingNightlyRate,
   bookingStayNights,
   firstUnpaidNightDateKey,
   nightsFromFirstUnpaidToPaidThrough,
-  prepaidNights,
 } from "@/lib/booking-payment-due";
 import { mskAddDays, mskDateKey, mskNightDiff } from "@/lib/msk-time";
 import {
@@ -84,14 +91,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           checkOut: booking.checkOut,
           discountPercent,
           discountPerNight,
+          extras: stayExtrasTotal(booking),
         });
 
     const pricingBooking = { ...booking, amount: useRules ? booking.amount || contractAmount : contractAmount };
     const firstUnpaidKey = firstUnpaidNightDateKey(pricingBooking, undefined, existingTx);
     const checkOutKey = mskDateKey(booking.checkOut);
 
-    let nights = Math.max(1, Math.round(Number(body.nights) || 0));
+    const extras = resolveRequestedStayExtras(booking, body.extras, bookingNightlyRate(pricingBooking));
+    if (extras.error) return NextResponse.json({ error: extras.error }, { status: 400 });
+    const extraItems = extras.items;
+    const extrasSum = extras.sum;
+    const extrasBookingData = extras.bookingData;
+
     const paidThroughRaw = body.paidThroughDate ? String(body.paidThroughDate).slice(0, 10) : "";
+    const extrasOnly = extraItems.length > 0 && Math.round(Number(body.nights) || 0) === 0 && !paidThroughRaw;
+    let nights = extrasOnly ? 0 : Math.max(1, Math.round(Number(body.nights) || 0));
 
     if (paidThroughRaw) {
       if (paidThroughRaw < firstUnpaidKey || paidThroughRaw > checkOutKey) {
@@ -100,11 +115,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       nights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
     }
 
-    if (nights < 1) {
+    if (!extrasOnly && nights < 1) {
       return NextResponse.json({ error: "Укажите период оплаты" }, { status: 400 });
     }
 
-    const prepaid = prepaidNights(pricingBooking, undefined, existingTx);
     const maxPayNights = Math.max(1, mskNightDiff(firstUnpaidKey, checkOutKey));
     if (nights > maxPayNights) {
       return NextResponse.json({ error: "Слишком много ночей для оплаты" }, { status: 400 });
@@ -112,13 +126,32 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const paidThroughDateResolved = paidThroughRaw || mskAddDays(firstUnpaidKey, nights - 1);
 
+    const extraTxData = (code: StayExtraCode, method: string, amount: number, extra: Partial<Prisma.TransactionUncheckedCreateInput> = {}) =>
+      prisma.transaction.create({
+        data: {
+          hotelId: booking.hotelId,
+          type: "payment",
+          category: "accommodation",
+          paymentMethod: method,
+          amount,
+          date: dateResolved.date,
+          bookingId: booking.id,
+          guestName: booking.guestName,
+          roomNumber: booking.room.number,
+          stayExtra: code,
+          note: stayExtraTxNote(code, body.note ? String(body.note) : null),
+          ...extra,
+        },
+      });
+
     // Смежная (раздельная) оплата: несколько способов на одну операцию.
     const splits = sanitizeSplitParts(body.splits);
     if (isSplitPayment(splits)) {
       // При смежной оплате правило-скидка не применяется — обычный тариф.
       const manualPct = useRules ? 0 : discountPercent;
       const manualPerNight = useRules ? 0 : discountPerNight;
-      const expectedTotal = calcNightPaymentTotal(booking.room.price, nights, manualPct, manualPerNight);
+      const nightsTotal = nights > 0 ? calcNightPaymentTotal(booking.room.price, nights, manualPct, manualPerNight) : 0;
+      const expectedTotal = nightsTotal + extrasSum;
 
       const splitCheck = validateSplitParts(splits, expectedTotal);
       if (!splitCheck.ok) {
@@ -127,6 +160,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
       const total = sumSplitParts(splits);
       const groupId = newPaymentGroupId();
+
+      const { extraParts, nightParts } = allocateStayExtrasFromSplits(splits, extraItems);
+      const extraOps = extraParts.map((p) =>
+        extraTxData(p.code, p.method, p.amount, { paymentGroupId: groupId })
+      );
       const amountChanged = !useRules && contractAmount !== booking.amount;
       const discountChanged =
         !useRules &&
@@ -138,13 +176,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         discountPercent: manualPct,
         discountPerNight: manualPerNight,
       };
-      const baseNote = buildAccommodationPaymentNote(bookingForNote, total, {
+      const baseNote = buildAccommodationPaymentNote(bookingForNote, total - extrasSum, {
         paidBefore: booking.paid,
         extra: `Оплачено до ${paidThroughDateResolved} 12:00`,
         userNote: body.note ?? null,
       });
 
-      const txOps = splits.map((part, i) =>
+      const txOps = nightParts.map((part, i) =>
         prisma.transaction.create({
           data: {
             hotelId: booking.hotelId,
@@ -161,20 +199,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             discountPercentApplied: manualPct,
             discountPerNightApplied: manualPerNight,
             paymentGroupId: groupId,
-            note: `${baseNote}. Смежная оплата ${i + 1}/${splits.length}`,
+            note: `${baseNote}. Смежная оплата ${i + 1}/${nightParts.length}`,
           },
         })
       );
 
+      const contractChanged = amountChanged || discountChanged;
       await prisma.$transaction([
         ...txOps,
+        ...extraOps,
         prisma.booking.update({
           where: { id: booking.id },
           data: {
             paid: { increment: total },
-            ...(amountChanged || discountChanged
-              ? { amount: contractAmount, discountPercent: manualPct, discountPerNight: manualPerNight }
+            ...(contractChanged ? { discountPercent: manualPct, discountPerNight: manualPerNight } : {}),
+            ...(contractChanged || extrasSum > 0
+              ? { amount: (contractChanged ? contractAmount : booking.amount) + extrasSum }
               : {}),
+            ...extrasBookingData,
           },
         }),
       ]);
@@ -185,21 +227,29 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const paymentMethod = String(body.paymentMethod ?? "cash");
     const amount = body.amount != null ? Math.round(Number(body.amount)) : 0;
 
-    if (!amount || amount <= 0) {
+    if (!extrasOnly && (!amount || amount <= 0)) {
       return NextResponse.json({ error: "Некорректная сумма" }, { status: 400 });
     }
 
-    const validation = validatePaymentDiscount({
-      rules: discountRules,
-      hotelId: booking.hotelId,
-      roomPrice: booking.room.price,
-      paymentNights: nights,
-      paymentMethod,
-      amount,
-      discountRuleId: body.discountRuleId ?? null,
-      discountPercent: useRules ? 0 : discountPercent,
-      discountPerNight: useRules ? 0 : discountPerNight,
-    });
+    const validation = extrasOnly
+      ? {
+          ok: true as const,
+          expectedAmount: 0,
+          rule: null,
+          discountPercent: booking.discountPercent ?? 0,
+          discountPerNight: booking.discountPerNight ?? 0,
+        }
+      : validatePaymentDiscount({
+          rules: discountRules,
+          hotelId: booking.hotelId,
+          roomPrice: booking.room.price,
+          paymentNights: nights,
+          paymentMethod,
+          amount,
+          discountRuleId: body.discountRuleId ?? null,
+          discountPercent: useRules ? 0 : discountPercent,
+          discountPerNight: useRules ? 0 : discountPerNight,
+        });
 
     if (!validation.ok) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
@@ -222,9 +272,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const paidThroughDate = paidThroughRaw || mskAddDays(firstUnpaidKey, nights - 1);
     const discountChanged =
+      !extrasOnly &&
       !useRules &&
       (discountPercent !== (booking.discountPercent ?? 0) || discountPerNight !== (booking.discountPerNight ?? 0));
-    const amountChanged = !useRules && contractAmount !== booking.amount;
+    const amountChanged = !extrasOnly && !useRules && contractAmount !== booking.amount;
+    const contractChanged = amountChanged || discountChanged;
 
     const appliedRule = validation.rule;
     const noteDiscount = appliedRule
@@ -240,7 +292,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       discountPerNight: useRules ? booking.discountPerNight ?? 0 : validation.discountPerNight,
     };
 
-    await prisma.$transaction([
+    const nightOps = extrasOnly ? [] : [
       prisma.transaction.create({
         data: {
           hotelId: booking.hotelId,
@@ -264,17 +316,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           ...(channelId ? { channelId } : {}),
         },
       }),
+    ];
+
+    await prisma.$transaction([
+      ...nightOps,
+      ...extraItems.map((item) =>
+        extraTxData(item.code, paymentMethod, item.fee, channelId ? { channelId } : {})
+      ),
       prisma.booking.update({
         where: { id: booking.id },
         data: {
-          paid: { increment: validation.expectedAmount },
-          ...(amountChanged || discountChanged
+          paid: { increment: validation.expectedAmount + extrasSum },
+          ...(contractChanged
             ? {
-                amount: contractAmount,
                 discountPercent: validation.discountPercent,
                 discountPerNight: validation.discountPerNight,
               }
             : {}),
+          ...(contractChanged || extrasSum > 0
+            ? { amount: (contractChanged ? contractAmount : booking.amount) + extrasSum }
+            : {}),
+          ...extrasBookingData,
           ...(channelId ? { channelId } : {}),
         },
       }),

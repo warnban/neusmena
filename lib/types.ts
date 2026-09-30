@@ -139,6 +139,8 @@ export interface Booking {
   paid: number;
   discountPercent?: number;
   discountPerNight?: number;
+  earlyCheckInFee?: number;
+  lateCheckOutFee?: number;
   notes: string;
   checkedOutAt?: Date | string | null;
 }
@@ -375,6 +377,7 @@ export interface Transaction {
   discountPercentApplied?: number | null;
   discountPerNightApplied?: number | null;
   paymentGroupId?: string | null;
+  stayExtra?: string | null;
 }
 
 export interface ServiceItem {

@@ -6,6 +6,8 @@ export function calcStayAmount(params: {
   checkOut: Date;
   discountPercent?: number;
   discountPerNight?: number;
+  /** Доплаты за ранний заезд / поздний выезд — прибавляются после скидок. */
+  extras?: number;
 }): number {
   const nights = mskNightDiff(params.checkIn, params.checkOut);
   const base = params.roomPrice * nights;
@@ -18,5 +20,5 @@ export function calcStayAmount(params: {
     total = Math.max(0, total - params.discountPerNight * nights);
   }
 
-  return total;
+  return total + Math.max(0, params.extras ?? 0);
 }

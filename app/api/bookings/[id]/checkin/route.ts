@@ -30,6 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       date: body.date,
       operationDate: body.operationDate,
       paymentSplits: body.paymentSplits,
+      stayExtras: Array.isArray(body.stayExtras) ? body.stayExtras : undefined,
     });
 
     if (!result.ok) {

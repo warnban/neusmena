@@ -5,6 +5,12 @@ import { prisma } from "@/lib/prisma";
 import type { SessionPayload } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { calcStayAmount } from "@/lib/booking-pricing";
+import { stayExtrasTotal, type StayExtraCode } from "@/lib/stay-extras";
+import {
+  allocateStayExtrasFromSplits,
+  resolveRequestedStayExtras,
+  stayExtraTxNote,
+} from "@/lib/stay-extras.server";
 import {
   guestUpdatePayload,
   migRegDeadlineFrom,
@@ -26,6 +32,7 @@ import {
   sumSplitParts,
 } from "@/lib/payment-split";
 import {
+  bookingNightlyRate,
   bookingStayNights,
   firstUnpaidNightDateKey,
   nightsFromFirstUnpaidToPaidThrough,
@@ -87,14 +94,22 @@ export async function performCheckIn(
       checkOut: booking.checkOut,
       discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
       discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
+      extras: stayExtrasTotal(booking),
     }),
   };
 
   const firstUnpaidKey = firstUnpaidNightDateKey(pricingBooking, undefined, existingTx);
   const checkOutKey = mskDateKey(booking.checkOut);
 
-  let paymentNights = Math.max(1, Math.round(Number(input.paymentNights) || stayNights));
+  const extras = input.skipPayment
+    ? { items: [], sum: 0, bookingData: {} }
+    : resolveRequestedStayExtras(booking, input.stayExtras, bookingNightlyRate(pricingBooking));
+  if ("error" in extras && extras.error) return { ok: false, error: extras.error };
+
   const paidThroughRaw = input.paidThroughDate ? String(input.paidThroughDate).slice(0, 10) : "";
+  const extrasOnly =
+    extras.items.length > 0 && input.paymentNights != null && Math.round(Number(input.paymentNights)) === 0 && !paidThroughRaw;
+  let paymentNights = extrasOnly ? 0 : Math.max(1, Math.round(Number(input.paymentNights) || stayNights));
 
   if (paidThroughRaw) {
     if (paidThroughRaw < firstUnpaidKey || paidThroughRaw > checkOutKey) {
@@ -103,7 +118,7 @@ export async function performCheckIn(
     paymentNights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
   }
 
-  if (paymentNights < 1) {
+  if (!extrasOnly && paymentNights < 1) {
     return { ok: false, error: "Укажите период оплаты" };
   }
 
@@ -118,10 +133,11 @@ export async function performCheckIn(
     checkOut: booking.checkOut,
     discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
     discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
+    extras: stayExtrasTotal(booking) + extras.sum,
   });
 
   const debt = Math.max(0, finalAmount - booking.paid);
-  if (!input.skipPayment && debt > 0 && paymentAmount <= 0) {
+  if (!input.skipPayment && !extrasOnly && debt > 0 && paymentAmount <= 0) {
     return { ok: false, error: "Укажите сумму оплаты" };
   }
 
@@ -147,6 +163,10 @@ export async function performCheckIn(
     appliedPct = useRules ? 0 : discountPercent;
     appliedPerNight = useRules ? 0 : discountPerNight;
     paymentGroupId = newPaymentGroupId();
+  } else if (extrasOnly) {
+    payNow = extras.sum;
+    appliedPct = useRules ? 0 : discountPercent;
+    appliedPerNight = useRules ? 0 : discountPerNight;
   } else if (payNow > 0) {
     const validation = validatePaymentDiscount({
       rules: discountRules,
@@ -162,7 +182,7 @@ export async function performCheckIn(
     if (!validation.ok) {
       return { ok: false, error: validation.error };
     }
-    payNow = validation.expectedAmount;
+    payNow = validation.expectedAmount + extras.sum;
     appliedRuleId = validation.rule?.id ?? null;
     appliedPct = validation.discountPercent;
     appliedPerNight = validation.discountPerNight;
@@ -258,6 +278,7 @@ export async function performCheckIn(
         discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
         ...(payNow > 0 ? { paid: { increment: payNow } } : {}),
         ...(channelId ? { channelId } : {}),
+        ...extras.bookingData,
       },
     }),
     prisma.booking.updateMany({
@@ -277,13 +298,35 @@ export async function performCheckIn(
       : [prisma.room.update({ where: { id: booking.roomId }, data: { status: "occupied" } })]),
   ];
 
+  const extraTx = (code: StayExtraCode, method: string, amount: number, extra: Partial<Prisma.TransactionUncheckedCreateInput> = {}) =>
+    prisma.transaction.create({
+      data: {
+        hotelId: booking.hotelId,
+        type: "payment",
+        category: "accommodation",
+        paymentMethod: method,
+        amount,
+        date: dateResolved.date,
+        bookingId: booking.id,
+        guestName: resolvedGuestName,
+        roomNumber: booking.room.number,
+        stayExtra: code,
+        note: stayExtraTxNote(code, input.note ?? null),
+        ...extra,
+      },
+    });
+
   if (payNow > 0 && useSplit) {
-    const baseNote = buildAccommodationPaymentNote(bookingForNote, payNow, {
+    const { extraParts, nightParts } = allocateStayExtrasFromSplits(splits, extras.items);
+    for (const p of extraParts) {
+      ops.push(extraTx(p.code, p.method, p.amount, { paymentGroupId }));
+    }
+    const baseNote = buildAccommodationPaymentNote(bookingForNote, payNow - extras.sum, {
       paidBefore: booking.paid,
       extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
       userNote: input.note ?? null,
     });
-    splits.forEach((part, i) => {
+    nightParts.forEach((part, i) => {
       ops.push(
         prisma.transaction.create({
           data: {
@@ -301,12 +344,18 @@ export async function performCheckIn(
             discountPercentApplied: appliedPct,
             discountPerNightApplied: appliedPerNight,
             paymentGroupId,
-            note: `${baseNote}. Смежная оплата ${i + 1}/${splits.length}`,
+            note: `${baseNote}. Смежная оплата ${i + 1}/${nightParts.length}`,
           },
         })
       );
     });
   } else if (payNow > 0) {
+    for (const item of extras.items) {
+      ops.push(extraTx(item.code, paymentMethod, item.fee, channelId ? { channelId } : {}));
+    }
+  }
+  if (payNow > extras.sum && !useSplit) {
+    const nightsAmount = payNow - extras.sum;
     ops.push(
       prisma.transaction.create({
         data: {
@@ -314,7 +363,7 @@ export async function performCheckIn(
           type: "payment",
           category: "accommodation",
           paymentMethod,
-          amount: payNow,
+          amount: nightsAmount,
           date: dateResolved.date,
           bookingId: booking.id,
           guestName: resolvedGuestName,
@@ -323,7 +372,7 @@ export async function performCheckIn(
           discountRuleId: appliedRuleId,
           discountPercentApplied: appliedPct,
           discountPerNightApplied: appliedPerNight,
-          note: buildAccommodationPaymentNote(bookingForNote, payNow, {
+          note: buildAccommodationPaymentNote(bookingForNote, nightsAmount, {
             paidBefore: booking.paid,
             extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
             userNote: input.note ?? null,

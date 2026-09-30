@@ -30,6 +30,14 @@ import {
   paymentNightlyWithRule,
 } from "@/lib/hotel-discount-rules";
 import type { Booking, Transaction } from "@/lib/types";
+import {
+  STAY_EXTRAS,
+  STAY_EXTRA_CODES,
+  hasStayExtra,
+  stayExtraFee,
+  stayExtrasTotal,
+  type StayExtraCode,
+} from "@/lib/stay-extras";
 
 export type BookingPaymentPayload = {
   amount: number;
@@ -43,6 +51,8 @@ export type BookingPaymentPayload = {
   discountPerNight: number;
   discountRuleId?: string;
   operationDate?: string;
+  /** Новые доплаты: ранний заезд / поздний выезд. `amount` — только оплата ночей. */
+  extras?: StayExtraCode[];
 };
 
 type PeriodMode = "nights" | "date";
@@ -81,6 +91,7 @@ export function BookingPaymentForm({
   const [channelId, setChannelId] = useState("");
   const [note, setNote] = useState("");
   const [operationDate, setOperationDate] = useState(() => mskDateKey());
+  const [extrasSel, setExtrasSel] = useState<StayExtraCode[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -103,8 +114,9 @@ export function BookingPaymentForm({
         checkOut: booking.checkOut,
         discountPercent: pct,
         discountPerNight: perNight,
+        extras: stayExtrasTotal(booking),
       }),
-    [roomPrice, booking.checkIn, booking.checkOut, pct, perNight]
+    [roomPrice, booking, pct, perNight]
   );
 
   const contractAmount = booking.amount;
@@ -121,23 +133,32 @@ export function BookingPaymentForm({
   );
 
   const contractNightly = bookingNightlyRate(contractBooking);
-  const quoteNightly = stayNights > 0 ? Math.round(quoteAmount / stayNights) : 0;
+  const quoteNightly =
+    stayNights > 0 ? Math.round(Math.max(0, quoteAmount - stayExtrasTotal(booking)) / stayNights) : 0;
 
   const firstUnpaidKey = firstUnpaidNightDateKey(contractBooking, undefined, transactions);
   const currentPaidThrough = paidThroughDateKey(contractBooking, undefined, transactions);
   const prepaid = prepaidNights(contractBooking, undefined, transactions);
   const maxPaidThroughKey = checkOutKey;
-  const maxPayNights = Math.max(1, mskNightDiff(firstUnpaidKey, checkOutKey));
+  const unpaidNightsLeft = Math.max(0, mskNightDiff(firstUnpaidKey, checkOutKey));
+  const allNightsPaid = unpaidNightsLeft <= 0;
+  const maxPayNights = Math.max(1, unpaidNightsLeft);
+
+  const extraFee = stayExtraFee(discountChanged ? quoteNightly : contractNightly);
+  const extrasSum = extrasSel.length * extraFee;
+  const nightsOptional = extrasSel.length > 0;
 
   const selectedNights = useMemo(() => {
+    if (allNightsPaid) return 0;
     if (periodMode === "nights") {
-      const n = Math.max(1, Math.round(Number(nightsCount) || 1));
-      return Math.min(n, maxPayNights);
+      const raw = Math.round(Number(nightsCount) || 0);
+      if (nightsOptional && raw <= 0) return 0;
+      return Math.min(Math.max(1, raw), maxPayNights);
     }
     if (!paidThrough) return 1;
     const n = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThrough);
     return Math.max(1, Math.min(n, maxPayNights));
-  }, [periodMode, nightsCount, paidThrough, firstUnpaidKey, maxPayNights]);
+  }, [allNightsPaid, periodMode, nightsCount, nightsOptional, paidThrough, firstUnpaidKey, maxPayNights]);
 
   const selectedPaidThrough = useMemo(() => {
     if (periodMode === "date" && paidThrough) return paidThrough;
@@ -160,16 +181,24 @@ export function BookingPaymentForm({
       ? quoteNightly
       : contractNightly;
 
-  const paymentAmount = useRules
-    ? isSplit
-      ? selectedNights * roomPrice
-      : calcPaymentWithRule(roomPrice, selectedNights, matchedRule)
-    : selectedNights * paymentNightly;
+  const paymentAmount =
+    selectedNights <= 0
+      ? 0
+      : useRules
+        ? isSplit
+          ? selectedNights * roomPrice
+          : calcPaymentWithRule(roomPrice, selectedNights, matchedRule)
+        : selectedNights * paymentNightly;
+  const totalToPay = paymentAmount + extrasSum;
 
   // Сумма для смежной оплаты всегда без правило-скидки (полный тариф).
-  const splitTarget = selectedNights * (useRules ? roomPrice : paymentNightly);
+  const splitTarget = selectedNights * (useRules ? roomPrice : paymentNightly) + extrasSum;
 
-  const contractDebt = Math.max(0, contractAmount - effectivePaid);
+  const contractDebt = Math.max(0, contractAmount + extrasSum - effectivePaid);
+
+  function toggleExtra(code: StayExtraCode) {
+    setExtrasSel((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
+  }
   const pmEntries = Object.entries(pmConfig);
   const pmLabels = useMemo(
     () => Object.fromEntries(pmEntries.map(([k, v]) => [k, v.label])),
@@ -182,7 +211,7 @@ export function BookingPaymentForm({
 
   async function handleSubmit() {
     setError("");
-    if (paymentAmount <= 0) {
+    if (totalToPay <= 0) {
       setError("Сумма оплаты должна быть больше нуля");
       return;
     }
@@ -191,7 +220,7 @@ export function BookingPaymentForm({
         setError("Сумма каждого способа должна быть больше нуля");
         return;
       }
-      if (sumSplitParts(paymentSel.parts) !== paymentAmount) {
+      if (sumSplitParts(paymentSel.parts) !== totalToPay) {
         setError("Распределите всю сумму по способам оплаты");
         return;
       }
@@ -202,7 +231,8 @@ export function BookingPaymentForm({
     const ok = await onSubmit({
       amount: paymentAmount,
       nights: selectedNights,
-      paidThroughDate: selectedPaidThrough,
+      paidThroughDate: selectedNights > 0 ? selectedPaidThrough : "",
+      extras: extrasSel.length ? extrasSel : undefined,
       paymentMethod: method,
       splits: isSplit ? paymentSel.parts : undefined,
       note: note.trim() || undefined,
@@ -218,7 +248,7 @@ export function BookingPaymentForm({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        {[["Стоимость", money(totalAmount), "text-foreground"], ["Оплачено", money(effectivePaid), "text-success"], ["По договору", money(contractDebt), contractDebt > 0 ? "text-destructive" : "text-success"]].map(([l, v, c]) => (
+        {[["Стоимость", money(totalAmount + extrasSum), "text-foreground"], ["Оплачено", money(effectivePaid), "text-success"], ["По договору", money(contractDebt), contractDebt > 0 ? "text-destructive" : "text-success"]].map(([l, v, c]) => (
           <div key={String(l)} className="rounded-xl p-3 text-center bg-muted border border-border">
             <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1">{l}</div>
             <div className={`text-[18px] font-black ${c}`}>{v}</div>
@@ -231,6 +261,12 @@ export function BookingPaymentForm({
           <span className="text-muted-foreground">Тариф по договору</span>
           <span className="font-semibold text-right">{money(contractNightly)}/сут.</span>
         </div>
+        {STAY_EXTRA_CODES.filter((code) => hasStayExtra(booking, code)).map((code) => (
+          <div key={code} className="flex justify-between gap-2">
+            <span className="text-muted-foreground">{STAY_EXTRAS[code].label} ({STAY_EXTRAS[code].hours})</span>
+            <span className="font-semibold text-right">{money(booking[STAY_EXTRAS[code].field] ?? 0)}</span>
+          </div>
+        ))}
         {prepaid > 0 && currentPaidThrough && (
           <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Сейчас оплачено до</span>
@@ -301,6 +337,44 @@ export function BookingPaymentForm({
         </div>
       )}
 
+      {STAY_EXTRA_CODES.some((code) => !hasStayExtra(booking, code)) && (
+        <fieldset>
+          <legend className="text-[12px] font-bold text-muted-foreground mb-2">Дополнительно к проживанию</legend>
+          <div className="space-y-2">
+            {STAY_EXTRA_CODES.filter((code) => !hasStayExtra(booking, code)).map((code) => {
+              const checked = extrasSel.includes(code);
+              return (
+                <label
+                  key={code}
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${
+                    checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleExtra(code)}
+                    className="h-4 w-4 accent-[hsl(var(--primary))]"
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[13px] font-semibold text-foreground">{STAY_EXTRAS[code].label}</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {STAY_EXTRAS[code].hours} · 50% стоимости суток
+                    </span>
+                  </span>
+                  <span className="text-[13px] font-bold text-foreground">+{money(extraFee)}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
+
+      {allNightsPaid ? (
+        <p className="rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-[12px] text-muted-foreground">
+          Все ночи до выезда уже оплачены{extrasSel.length ? " — будет оплачена только доплата." : "."}
+        </p>
+      ) : (
       <div>
         <label className="text-[12px] font-bold text-muted-foreground block mb-2">Период оплаты</label>
         <div className="flex gap-2 mb-3">
@@ -329,13 +403,17 @@ export function BookingPaymentForm({
             <label className="text-[11px] font-bold text-muted-foreground block mb-1">Ночей</label>
             <input
               type="number"
-              min={1}
+              min={nightsOptional ? 0 : 1}
               max={maxPayNights}
               value={nightsCount}
               onChange={(e) => setNightsCount(e.target.value)}
               className="w-full px-3 py-2.5 text-[15px] font-bold rounded-xl border border-border bg-muted outline-none focus:ring-2 focus:ring-ring"
             />
-            <p className="text-[10px] text-muted-foreground mt-1">До {fmtDate(parseMskDate(selectedPaidThrough))} 12:00</p>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {selectedNights > 0
+                ? `До ${fmtDate(parseMskDate(selectedPaidThrough))} 12:00`
+                : "Без оплаты ночей — только доплата"}
+            </p>
           </div>
         ) : (
           <div>
@@ -352,13 +430,21 @@ export function BookingPaymentForm({
           </div>
         )}
       </div>
+      )}
 
       <div className="rounded-xl p-4 border-2 border-primary/30 bg-primary/5 flex justify-between items-center">
         <div>
           <div className="text-[11px] font-bold text-muted-foreground uppercase">К оплате</div>
-          <div className="text-[10px] text-muted-foreground">{selectedNights} ноч. × {money(paymentNightly)}</div>
+          {selectedNights > 0 && (
+            <div className="text-[10px] text-muted-foreground">{selectedNights} ноч. × {money(paymentNightly)}</div>
+          )}
+          {extrasSel.map((code) => (
+            <div key={code} className="text-[10px] text-muted-foreground">
+              + {STAY_EXTRAS[code].label.toLowerCase()} {money(extraFee)}
+            </div>
+          ))}
         </div>
-        <div className="text-[22px] font-black text-primary">{money(paymentAmount)}</div>
+        <div className="text-[22px] font-black text-primary">{money(totalToPay)}</div>
       </div>
 
       <div>
@@ -407,9 +493,9 @@ export function BookingPaymentForm({
           onClick={handleSubmit}
           disabled={
             busy ||
-            paymentAmount <= 0 ||
+            totalToPay <= 0 ||
             (!isSplit && method === OTA_PAYMENT_CODE && !channelId) ||
-            (isSplit && sumSplitParts(paymentSel.parts) !== paymentAmount)
+            (isSplit && sumSplitParts(paymentSel.parts) !== totalToPay)
           }
           className="w-full flex items-center justify-center gap-2 py-2.5 text-white text-[13px] font-bold rounded-xl hover:opacity-90 disabled:opacity-50"
           style={{ background: "hsl(var(--success))" }}

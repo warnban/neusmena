@@ -77,6 +77,7 @@ export function CheckInPaymentModal({
                 discountRuleId: payload.discountRuleId,
                 operationDate: payload.operationDate,
                 paymentSplits: payload.splits,
+                stayExtras: payload.extras,
               }
             : {}),
         }),
