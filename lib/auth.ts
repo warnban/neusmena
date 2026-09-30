@@ -44,10 +44,16 @@ export async function getSession(): Promise<SessionPayload | null> {
   return payload;
 }
 
+/** COOKIE_SECURE=false — только пока сайт открыт по http без домена и HTTPS. */
+export function secureCookiesEnabled(): boolean {
+  if (process.env.COOKIE_SECURE === "false") return false;
+  return process.env.NODE_ENV === "production";
+}
+
 export async function setAuthCookie(token: string) {
   cookies().set("auth-token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: secureCookiesEnabled(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,

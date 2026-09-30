@@ -4,6 +4,7 @@ import { timingSafeEqual } from "crypto";
 import { SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { getJwtSecret } from "@/lib/jwt-secret";
+import { secureCookiesEnabled } from "@/lib/auth";
 import {
   PLATFORM_DEV_COOKIE,
   verifyPlatformDevToken,
@@ -47,7 +48,7 @@ export async function getPlatformDevSession(): Promise<PlatformDevSession | null
 export async function setPlatformDevCookie(token: string) {
   cookies().set(PLATFORM_DEV_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: secureCookiesEnabled(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 12,
