@@ -27,7 +27,7 @@ export async function PATCH(
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
 
   const body = await req.json();
-  const { number, category, floor, status, price, amenities, dormGender, addBedNumbers, addBeds, bedCount } = body as {
+  const { number, category, floor, status, price, amenities, dormGender, addBedNumbers, removeBedIds } = body as {
     number?: string;
     category?: string;
     floor?: number;
@@ -36,8 +36,7 @@ export async function PATCH(
     amenities?: string[];
     dormGender?: DormGender;
     addBedNumbers?: string[];
-    addBeds?: number;
-    bedCount?: number;
+    removeBedIds?: string[];
   };
 
   if (number !== undefined) {
@@ -71,6 +70,25 @@ export async function PATCH(
     bedsToAdd = check.numbers;
   }
 
+  let bedsToRemove: string[] = [];
+  if (room.kind === "dorm" && Array.isArray(removeBedIds) && removeBedIds.length) {
+    const own = new Set(room.beds.map((b) => b.id));
+    bedsToRemove = removeBedIds.filter((id) => own.has(id));
+    if (room.beds.length - bedsToRemove.length + bedsToAdd.length < 1) {
+      return NextResponse.json({ error: "В общей комнате должна остаться хотя бы одна койка" }, { status: 400 });
+    }
+    const busy = await prisma.booking.findFirst({
+      where: { bedId: { in: bedsToRemove }, status: { in: ["new", "confirmed", "checkedin"] } },
+      select: { guestName: true, bed: { select: { label: true } } },
+    });
+    if (busy) {
+      return NextResponse.json(
+        { error: `Койку ${busy.bed?.label ?? ""} нельзя удалить: на неё есть бронь (${busy.guestName})` },
+        { status: 409 }
+      );
+    }
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.room.update({
       where: { id: room.id },
@@ -84,6 +102,12 @@ export async function PATCH(
         ...(room.kind === "dorm" && dormGender !== undefined ? { dormGender } : {}),
       },
     });
+
+    if (bedsToRemove.length) {
+      await tx.hkTask.updateMany({ where: { bedId: { in: bedsToRemove } }, data: { bedId: null } });
+      await tx.booking.updateMany({ where: { bedId: { in: bedsToRemove } }, data: { bedId: null } });
+      await tx.bed.deleteMany({ where: { id: { in: bedsToRemove }, roomId: room.id } });
+    }
 
     if (bedsToAdd.length) {
       await tx.bed.createMany({
