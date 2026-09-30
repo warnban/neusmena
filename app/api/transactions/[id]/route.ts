@@ -9,6 +9,7 @@ import {
   manualTxTypeFromDirection,
 } from "@/lib/transaction-manual.server";
 import { resolveTransactionDateInput } from "@/lib/transaction-date.server";
+import { mskDateKey } from "@/lib/msk-time";
 import { apiErrorMessage } from "@/lib/api-error";
 
 type RouteParams = { params: Promise<{ id: string }> | { id: string } };
@@ -99,7 +100,7 @@ export async function PATCH(req: NextRequest, context: RouteParams) {
       if (!dateResolved.ok) {
         return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
       }
-      txDate = dateResolved.date;
+      if (dateResolved.dateKey !== mskDateKey(tx.date)) txDate = dateResolved.date;
     }
 
     const updated = await prisma.transaction.update({

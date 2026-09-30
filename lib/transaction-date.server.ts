@@ -32,10 +32,19 @@ export function resolveTransactionDateInput(
 
   return {
     ok: true,
-    date: parseMskDateKey(dateKey),
+    date: isBackdate ? atCurrentMskTime(dateKey, todayKey) : new Date(),
     dateKey,
     isBackdate,
   };
+}
+
+/** Тот же день dateKey (МСК), но с текущим временем суток. В МСК нет перехода на летнее время. */
+function atCurrentMskTime(dateKey: string, todayKey: string): Date {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const daysBack = Math.round(
+    (parseMskDateKey(todayKey).getTime() - parseMskDateKey(dateKey).getTime()) / dayMs
+  );
+  return new Date(Date.now() - daysBack * dayMs);
 }
 
 export async function assertPaymentOperationAllowed(

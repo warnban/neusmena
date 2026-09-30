@@ -1,7 +1,8 @@
 "use client";
 
 import { Icon } from "@/components/icon";
-import { money, fmtDate } from "@/lib/format";
+import { money } from "@/lib/format";
+import { fmtMskDateTime } from "@/lib/msk-time";
 import { isTransactionCancelled } from "@/lib/finance";
 import { TX_CAT_LABELS } from "@/lib/tx-categories";
 import { txTypeLabel } from "@/lib/guest-payments";
@@ -63,8 +64,7 @@ export function PaymentHistoryList({
                 )}
                 <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
                   <span className="font-mono">
-                    {fmtDate(t.date, true)}{" "}
-                    {t.date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                    {fmtMskDateTime(t.date)}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <Icon name={pmCfg.icon} size={11} style={{ color: pmCfg.color }} />
