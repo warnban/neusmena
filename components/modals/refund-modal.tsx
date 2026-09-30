@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X, Search, RotateCcw, Check } from "lucide-react";
+import { X, Search, RotateCcw, Check, Printer } from "lucide-react";
 import { Icon } from "@/components/icon";
 import { OperationDateField } from "@/components/ui/operation-date-field";
 import { Modal } from "@/components/ui/modal";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate } from "@/lib/format";
 import { mskDateKey } from "@/lib/msk-time";
+import { buildGuestFormsPrintUrl } from "@/lib/guest-print-forms";
 
 type RefundCandidate = {
   id: string;
@@ -52,6 +53,14 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [quote, setQuote] = useState<RefundQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [done, setDone] = useState<{
+    refundId: string;
+    bookingId: string;
+    guestId: string | null;
+    guestName: string;
+    amount: number;
+    nights: number;
+  } | null>(null);
 
   const pmEntries = Object.entries(pmConfig);
   const maxNights = selected
@@ -155,7 +164,14 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
         return;
       }
       await refresh();
-      onClose();
+      setDone({
+        refundId: data.refund.id,
+        bookingId: data.refund.bookingId,
+        guestId: data.refund.guestId ?? null,
+        guestName: selected.guestName,
+        amount: data.refund.amount,
+        nights: data.refund.nights,
+      });
     } finally {
       setBusy(false);
     }
@@ -171,6 +187,54 @@ export function RefundModal({ onClose }: { onClose: () => void }) {
       <Modal onClose={onClose} className="max-w-sm p-6 text-center" layerClassName="z-[60]" ariaLabel="Нет доступных отелей">
           <p className="text-[13px] text-muted-foreground">Нет доступных отелей</p>
           <button onClick={onClose} className="mt-4 px-4 py-2 text-[12px] font-bold rounded-lg bg-muted">Закрыть</button>
+      </Modal>
+    );
+  }
+
+  if (done) {
+    const printRefundForm = () => {
+      if (!done.guestId) return;
+      const url = buildGuestFormsPrintUrl({
+        guestId: done.guestId,
+        bookingId: done.bookingId,
+        formIds: ["refund-form"],
+        refundId: done.refundId,
+      });
+      window.open(url, "_blank", "noopener,noreferrer");
+    };
+    return (
+      <Modal onClose={onClose} className="max-w-sm p-6 text-center" layerClassName="z-[60]">
+        <div className="mx-auto w-12 h-12 rounded-full bg-success/10 text-success flex items-center justify-center">
+          <Check size={22} />
+        </div>
+        <h2 className="text-[15px] font-bold text-foreground mt-3">Возврат проведён</h2>
+        <p className="text-[12px] text-muted-foreground mt-1">
+          {done.guestName} · {money(done.amount)} за {done.nights} ноч.
+        </p>
+        {done.guestId ? (
+          <p className="text-[12px] text-foreground mt-3">Распечатать бланк возврата для подписи гостя?</p>
+        ) : (
+          <p className="text-[11px] text-amber-700 mt-3">У брони нет карточки гостя — бланк можно распечатать вручную.</p>
+        )}
+        <div className="mt-5 flex flex-col gap-2">
+          {done.guestId && (
+            <button
+              type="button"
+              onClick={printRefundForm}
+              autoFocus
+              className="w-full py-2.5 text-[13px] font-bold rounded-xl bg-primary text-primary-foreground hover:opacity-90 flex items-center justify-center gap-2"
+            >
+              <Printer size={15} /> Распечатать бланк возврата
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 text-[13px] font-bold rounded-xl bg-muted text-foreground hover:bg-muted/70"
+          >
+            {done.guestId ? "Не печатать" : "Закрыть"}
+          </button>
+        </div>
       </Modal>
     );
   }

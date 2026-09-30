@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
           category: "accommodation",
           paymentMethod,
           amount,
+          paymentNights: nights,
           date: dateResolved.date,
           guestName: ctx.booking.guestName,
           roomNumber: ctx.roomNumber,
@@ -188,6 +189,8 @@ export async function POST(req: NextRequest) {
       ok: true,
       refund: {
         id: result.refund.id,
+        bookingId: ctx.booking.id,
+        guestId: ctx.booking.guestId,
         amount: result.refund.amount,
         nights: result.refund.nights,
         withholdNights: result.refund.withholdNights,

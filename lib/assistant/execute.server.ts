@@ -343,6 +343,7 @@ async function executeRefund(
         category: "accommodation",
         paymentMethod,
         amount,
+        paymentNights: nights,
         guestName: ctx.booking.guestName,
         roomNumber: ctx.roomNumber,
         note: refundNote,

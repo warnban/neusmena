@@ -166,6 +166,18 @@ const doc = new Document({
             }),
             new TableRow({
               children: [
+                cell(para([txt("Ночей к возврату", { bold: true })], { after: 0 }), { borders: thinBorders }),
+                cell(para([ph("{refund_nights}")], { after: 0 }), { borders: thinBorders }),
+              ],
+            }),
+            new TableRow({
+              children: [
+                cell(para([txt("Способ возврата", { bold: true })], { after: 0 }), { borders: thinBorders }),
+                cell(para([ph("{refund_method}")], { after: 0 }), { borders: thinBorders }),
+              ],
+            }),
+            new TableRow({
+              children: [
                 cell(para([txt("Реквизиты для возврата", { bold: true })], { after: 0 }), { borders: thinBorders }),
                 cell(
                   para([txt("________________________________________________________", { size: SZ })], { after: 0 }),
@@ -177,8 +189,8 @@ const doc = new Document({
         }),
 
         para([
-          txt("Сумма к возврату (заполняет администрация): ", { bold: true }),
-          txt("____________________ руб."),
+          txt("Сумма к возврату: ", { bold: true }),
+          ph("{refund_amount}"),
         ], { before: 160, after: 160 }),
 
         new Table({

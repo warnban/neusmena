@@ -65,6 +65,7 @@ export function buildGuestFormsPrintUrl(params: {
   bookingId: string;
   formIds?: GuestFormId[];
   autoPrint?: boolean;
+  refundId?: string;
 }): string {
   const q = new URLSearchParams({
     guestId: params.guestId,
@@ -72,7 +73,23 @@ export function buildGuestFormsPrintUrl(params: {
     formIds: (params.formIds ?? CHECK_IN_PRINT_FORM_IDS).join(","),
     print: params.autoPrint === false ? "0" : "1",
   });
+  if (params.refundId) q.set("refundId", params.refundId);
   return `/guests/form-print?${q.toString()}`;
+}
+
+export type RefundPrintInfo = { amount: number; nights: number; methodLabel: string };
+
+/** Без проведённого возврата поля остаются линиями для ручного заполнения. */
+export function buildRefundFormContext(
+  base: Record<string, string>,
+  refund: RefundPrintInfo | null
+): Record<string, string> {
+  return {
+    ...base,
+    refund_amount: refund ? money(refund.amount) : "____________________ руб.",
+    refund_nights: refund ? String(refund.nights) : "________",
+    refund_method: refund ? refund.methodLabel : "________________________",
+  };
 }
 
 export function parseGuestFormIds(raw: string | null): GuestFormId[] {
@@ -128,6 +145,9 @@ export const GUEST_FORM_VARIABLES: { key: string; description: string }[] = [
   { key: "night_delta", description: "Изменение суток (+/−)" },
   { key: "change_type", description: "продление / сокращение" },
   { key: "change_summary", description: "Краткое описание изменения" },
+  { key: "refund_amount", description: "Бланк возврата: сумма возврата" },
+  { key: "refund_nights", description: "Бланк возврата: ночей к возврату" },
+  { key: "refund_method", description: "Бланк возврата: способ возврата" },
 ];
 
 function moneyDelta(delta: number): string {

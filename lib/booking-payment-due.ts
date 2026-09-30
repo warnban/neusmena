@@ -24,7 +24,7 @@ export function accommodationPaymentTransactions(
 
 export function accommodationRefundNights(
   bookingId: string,
-  transactions?: Pick<Transaction, "bookingId" | "type" | "category" | "cancelledAt">[],
+  transactions?: Pick<Transaction, "bookingId" | "type" | "category" | "cancelledAt" | "paymentNights">[],
   refundRecords?: { bookingId: string; nights: number }[]
 ): number {
   if (refundRecords?.length) {
@@ -33,16 +33,24 @@ export function accommodationRefundNights(
       .reduce((s, r) => s + r.nights, 0);
   }
   if (!transactions?.length) return 0;
-  return 0;
+  return transactions
+    .filter(
+      (t) =>
+        t.bookingId === bookingId &&
+        t.type === "refund" &&
+        t.category === "accommodation" &&
+        !t.cancelledAt
+    )
+    .reduce((s, t) => s + Math.max(0, t.paymentNights ?? 0), 0);
 }
 
-/** Ночей предоплаты по транзакциям (paymentNights) или по сумме/тарифу.
- *  Смежные (split) платежи объединяются в одну «оплату» по paymentGroupId,
- *  чтобы одинаковый paymentNights у N частей не считался N раз. */
+/** РќРѕС‡РµР№ РїСЂРµРґРѕРїР»Р°С‚С‹ РїРѕ С‚СЂР°РЅР·Р°РєС†РёСЏРј (paymentNights) РёР»Рё РїРѕ СЃСѓРјРјРµ/С‚Р°СЂРёС„Сѓ.
+ *  РЎРјРµР¶РЅС‹Рµ (split) РїР»Р°С‚РµР¶Рё РѕР±СЉРµРґРёРЅСЏСЋС‚СЃСЏ РІ РѕРґРЅСѓ В«РѕРїР»Р°С‚СѓВ» РїРѕ paymentGroupId,
+ *  С‡С‚РѕР±С‹ РѕРґРёРЅР°РєРѕРІС‹Р№ paymentNights Сѓ N С‡Р°СЃС‚РµР№ РЅРµ СЃС‡РёС‚Р°Р»СЃСЏ N СЂР°Р·. */
 export function prepaidNightsFromTransactions(
   booking: Booking,
   transactions?: AccommodationTx[],
-  refundNights = 0
+  refundNights = accommodationRefundNights(booking.id, transactions)
 ): number | null {
   const payments = accommodationPaymentTransactions(booking.id, transactions);
   if (!payments.length) return null;
@@ -73,7 +81,7 @@ export function bookingNightlyRate(booking: Booking): number {
   return nights > 0 ? Math.round(booking.amount / nights) : 0;
 }
 
-/** Ночей, за которые гость уже «находится» в отеле (включая текущие сутки). */
+/** РќРѕС‡РµР№, Р·Р° РєРѕС‚РѕСЂС‹Рµ РіРѕСЃС‚СЊ СѓР¶Рµ В«РЅР°С…РѕРґРёС‚СЃСЏВ» РІ РѕС‚РµР»Рµ (РІРєР»СЋС‡Р°СЏ С‚РµРєСѓС‰РёРµ СЃСѓС‚РєРё). */
 export function nightsConsumedThrough(booking: Booking, dateKey = mskDateKey()): number {
   const today = parseMskDateKey(dateKey);
   const checkIn = startOfDay(new Date(booking.checkIn));
@@ -83,21 +91,18 @@ export function nightsConsumedThrough(booking: Booking, dateKey = mskDateKey()):
   return Math.max(1, dayDiff(checkIn, today) + 1);
 }
 
-/** Сумма оплат проживания: поле брони + активные транзакции (на случай рассинхрона). */
+/** РЎСѓРјРјР° РѕРїР»Р°С‚ РїСЂРѕР¶РёРІР°РЅРёСЏ Р·Р° РІС‹С‡РµС‚РѕРј РІРѕР·РІСЂР°С‚РѕРІ: РїРѕР»Рµ Р±СЂРѕРЅРё + Р°РєС‚РёРІРЅС‹Рµ С‚СЂР°РЅР·Р°РєС†РёРё (РЅР° СЃР»СѓС‡Р°Р№ СЂР°СЃСЃРёРЅС…СЂРѕРЅР°). */
 export function accommodationPaidTotal(
   booking: Pick<Booking, "id" | "paid">,
   transactions?: Pick<Transaction, "bookingId" | "type" | "category" | "amount" | "cancelledAt">[]
 ): number {
   if (!transactions?.length) return booking.paid;
-  const fromTx = transactions
-    .filter(
-      (t) =>
-        t.bookingId === booking.id &&
-        t.type === "payment" &&
-        t.category === "accommodation" &&
-        !t.cancelledAt
-    )
-    .reduce((s, t) => s + t.amount, 0);
+  let fromTx = 0;
+  for (const t of transactions) {
+    if (t.bookingId !== booking.id || t.category !== "accommodation" || t.cancelledAt) continue;
+    if (t.type === "payment") fromTx += t.amount;
+    else if (t.type === "refund") fromTx -= Math.abs(t.amount);
+  }
   return Math.max(booking.paid, fromTx);
 }
 
@@ -105,7 +110,7 @@ export function prepaidNights(
   booking: Booking,
   paidOverride?: number,
   transactions?: AccommodationTx[],
-  refundNights = 0
+  refundNights?: number
 ): number {
   const fromTx = prepaidNightsFromTransactions(booking, transactions, refundNights);
   if (fromTx != null) return fromTx;
@@ -127,29 +132,29 @@ export function prepaidNights(
   return Math.min(maxNights, Math.floor(exact));
 }
 
-/** Оплачено до 12:00 этого дня (МСК). null — если нет предоплаты. */
+/** РћРїР»Р°С‡РµРЅРѕ РґРѕ 12:00 СЌС‚РѕРіРѕ РґРЅСЏ (РњРЎРљ). null вЂ” РµСЃР»Рё РЅРµС‚ РїСЂРµРґРѕРїР»Р°С‚С‹. */
 export function paidThroughDateKey(
   booking: Booking,
   paidOverride?: number,
   transactions?: AccommodationTx[],
-  refundNights = 0
+  refundNights?: number
 ): string | null {
   const prepaid = prepaidNights(booking, paidOverride, transactions, refundNights);
   if (prepaid <= 0) return null;
   return mskAddDays(mskDateKey(booking.checkIn), prepaid);
 }
 
-/** Первая неоплаченная ночь (дата начала суток, МСК). */
+/** РџРµСЂРІР°СЏ РЅРµРѕРїР»Р°С‡РµРЅРЅР°СЏ РЅРѕС‡СЊ (РґР°С‚Р° РЅР°С‡Р°Р»Р° СЃСѓС‚РѕРє, РњРЎРљ). */
 export function firstUnpaidNightDateKey(
   booking: Booking,
   paidOverride?: number,
   transactions?: AccommodationTx[],
-  refundNights = 0
+  refundNights?: number
 ): string {
   return mskAddDays(mskDateKey(booking.checkIn), prepaidNights(booking, paidOverride, transactions, refundNights));
 }
 
-/** Ночей от первой неоплаченной до даты «оплачено до» включительно. */
+/** РќРѕС‡РµР№ РѕС‚ РїРµСЂРІРѕР№ РЅРµРѕРїР»Р°С‡РµРЅРЅРѕР№ РґРѕ РґР°С‚С‹ В«РѕРїР»Р°С‡РµРЅРѕ РґРѕВ» РІРєР»СЋС‡РёС‚РµР»СЊРЅРѕ. */
 export function nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey: string, paidThroughKey: string): number {
   return mskNightDiff(firstUnpaidKey, mskDayAfter(paidThroughKey));
 }
@@ -174,7 +179,7 @@ export function paymentDueInfo(booking: Booking, dateKey = mskDateKey(), transac
   };
 }
 
-/** Следующая ночь не оплачена: prepaid < consumed (но текущие сутки могут быть оплачены). */
+/** РЎР»РµРґСѓСЋС‰Р°СЏ РЅРѕС‡СЊ РЅРµ РѕРїР»Р°С‡РµРЅР°: prepaid < consumed (РЅРѕ С‚РµРєСѓС‰РёРµ СЃСѓС‚РєРё РјРѕРіСѓС‚ Р±С‹С‚СЊ РѕРїР»Р°С‡РµРЅС‹). */
 export function isPaymentDueToday(booking: Booking, dateKey = mskDateKey(), transactions?: Transaction[]): boolean {
   if (booking.status !== "checkedin") return false;
 
@@ -197,7 +202,7 @@ export function filterPaymentDueBookings(bookings: Booking[], dateKey = mskDateK
   return bookings.filter((b) => isPaymentDueToday(b, dateKey, transactions));
 }
 
-/** Оплачена только текущая ночь — скоро снова потребуется оплата. */
+/** РћРїР»Р°С‡РµРЅР° С‚РѕР»СЊРєРѕ С‚РµРєСѓС‰Р°СЏ РЅРѕС‡СЊ вЂ” СЃРєРѕСЂРѕ СЃРЅРѕРІР° РїРѕС‚СЂРµР±СѓРµС‚СЃСЏ РѕРїР»Р°С‚Р°. */
 export function isPaymentDueSoon(booking: Booking, dateKey = mskDateKey(), transactions?: Transaction[]): boolean {
   if (booking.status !== "checkedin") return false;
   if (isPaymentDueToday(booking, dateKey, transactions)) return false;
@@ -235,13 +240,13 @@ export interface StayReminder {
   kinds: StayReminderKind[];
 }
 
-/** @deprecated Используйте StayReminderKind */
+/** @deprecated РСЃРїРѕР»СЊР·СѓР№С‚Рµ StayReminderKind */
 export type TomorrowReminderKind = StayReminderKind;
 
-/** @deprecated Используйте StayReminder */
+/** @deprecated РСЃРїРѕР»СЊР·СѓР№С‚Рµ StayReminder */
 export type TomorrowReminder = StayReminder;
 
-/** Выселение завтра (МСК). */
+/** Р’С‹СЃРµР»РµРЅРёРµ Р·Р°РІС‚СЂР° (РњРЎРљ). */
 export function isCheckoutTomorrow(booking: Booking, todayKey = mskDateKey()): boolean {
   if (booking.status !== "checkedin") return false;
   return mskDateKey(booking.checkOut) === mskDayAfter(todayKey);
@@ -258,7 +263,7 @@ export function buildStayReminders(bookings: Booking[], todayKey = mskDateKey(),
   return rows;
 }
 
-/** @deprecated Используйте buildStayReminders */
+/** @deprecated РСЃРїРѕР»СЊР·СѓР№С‚Рµ buildStayReminders */
 export function buildTomorrowReminders(bookings: Booking[], todayKey = mskDateKey(), transactions?: Transaction[]): StayReminder[] {
   return buildStayReminders(bookings, todayKey, transactions);
 }

@@ -23,6 +23,7 @@ function FormPrintContent() {
   const guestId = sp.get("guestId") ?? "";
   const formIds = resolveFormIds(sp);
   const bookingId = sp.get("bookingId") ?? "";
+  const refundId = sp.get("refundId") ?? "";
   const autoPrint = sp.get("print") !== "0";
   const amendment = parseStayAmendmentFromSearchParams(sp);
   const amendmentKey = amendment
@@ -33,6 +34,7 @@ function FormPrintContent() {
     ? formIds.map((formId) => {
         const q = new URLSearchParams({ format: "docx" });
         if (bookingId) q.set("bookingId", bookingId);
+        if (refundId && formId === "refund-form") q.set("refundId", refundId);
         if (amendment) {
           q.set("prevCheckOut", new Date(amendment.checkOut).toISOString().slice(0, 10));
           q.set("prevAmount", String(amendment.amount));
@@ -55,7 +57,7 @@ function FormPrintContent() {
       items={items}
       title={title}
       autoPrint={autoPrint}
-      paramsKey={`${guestId}:${bookingId}:${amendmentKey}`}
+      paramsKey={`${guestId}:${bookingId}:${amendmentKey}:${refundId}`}
     />
   );
 }

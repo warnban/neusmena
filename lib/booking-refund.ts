@@ -15,7 +15,7 @@ export function refundableNights(
   booking: Booking,
   dateKey?: string,
   transactions?: Parameters<typeof prepaidNights>[2],
-  refundNights = 0
+  refundNights?: number
 ): number {
   const prepaid = prepaidNights(booking, undefined, transactions, refundNights);
   const consumed = nightsConsumedThrough(booking, dateKey);
@@ -30,7 +30,7 @@ export function canRefundBooking(
   booking: Booking,
   dateKey?: string,
   transactions?: Parameters<typeof prepaidNights>[2],
-  refundNights = 0
+  refundNights?: number
 ): boolean {
   if (booking.status !== "checkedin" && booking.status !== "checkedout" && booking.status !== "confirmed") {
     return false;
@@ -65,9 +65,9 @@ export async function loadRefundContext(bookingId: string, hotelId: string, seat
   const roomPrice = booking.room.price;
   const rawPayments = accommodationPaymentTransactions(bookingId, transactions);
 
-  // Смежные (split) части одного платежа: nights одинаковые у всех, суммы разные.
-  // При построении payment slices слепляем их в одну запись: nights один раз,
-  // amount — сумма частей, dominant paymentMethod и скидки — из первой части.
+  // РЎРјРµР¶РЅС‹Рµ (split) С‡Р°СЃС‚Рё РѕРґРЅРѕРіРѕ РїР»Р°С‚РµР¶Р°: nights РѕРґРёРЅР°РєРѕРІС‹Рµ Сѓ РІСЃРµС…, СЃСѓРјРјС‹ СЂР°Р·РЅС‹Рµ.
+  // РџСЂРё РїРѕСЃС‚СЂРѕРµРЅРёРё payment slices СЃР»РµРїР»СЏРµРј РёС… РІ РѕРґРЅСѓ Р·Р°РїРёСЃСЊ: nights РѕРґРёРЅ СЂР°Р·,
+  // amount вЂ” СЃСѓРјРјР° С‡Р°СЃС‚РµР№, dominant paymentMethod Рё СЃРєРёРґРєРё вЂ” РёР· РїРµСЂРІРѕР№ С‡Р°СЃС‚Рё.
   const bySlice = new Map<string, {
     nights: number;
     amount: number;

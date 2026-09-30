@@ -5,9 +5,11 @@ import { apiErrorMessage } from "@/lib/api-error";
 import {
   GUEST_FORM_TEMPLATES,
   buildGuestFormContext,
+  buildRefundFormContext,
   buildStayAmendmentContext,
   pickGuestBookingForForms,
   type GuestFormId,
+  type RefundPrintInfo,
   type StayAmendmentPrevious,
 } from "@/lib/guest-print-forms";
 import {
@@ -47,13 +49,30 @@ function parseAmendmentFromBody(body: Record<string, unknown>): StayAmendmentPre
   };
 }
 
+async function loadRefundPrintInfo(
+  refundId: string | null,
+  bookingId: string,
+  seatId: string
+): Promise<RefundPrintInfo | null> {
+  if (!refundId) return null;
+  const refund = await prisma.refundRecord.findFirst({
+    where: { id: refundId, bookingId, hotel: { seatId } },
+  });
+  if (!refund) return null;
+  const method = await prisma.paymentMethodDef.findFirst({
+    where: { seatId, code: refund.paymentMethod },
+  });
+  return { amount: refund.amount, nights: refund.nights, methodLabel: method?.label ?? refund.paymentMethod };
+}
+
 function buildFormContext(
   formId: GuestFormId,
   guest: Parameters<typeof buildGuestFormContext>[0],
   hotel: Parameters<typeof buildGuestFormContext>[1],
   booking: Parameters<typeof buildGuestFormContext>[2],
   room: Parameters<typeof buildGuestFormContext>[3],
-  amendment: StayAmendmentPrevious | null
+  amendment: StayAmendmentPrevious | null,
+  refund: RefundPrintInfo | null = null
 ) {
   const base = buildGuestFormContext(guest, hotel, booking, room);
   if (formId === "hotel-contract-amendment") {
@@ -62,6 +81,7 @@ function buildFormContext(
     }
     return buildStayAmendmentContext(base, amendment, booking);
   }
+  if (formId === "refund-form") return buildRefundFormContext(base, refund);
   return base;
 }
 
@@ -124,7 +144,8 @@ export async function GET(
     const room = await prisma.room.findUnique({ where: { id: booking.roomId } });
 
     const amendment = parseAmendmentFromQuery(req);
-    const context = buildFormContext(formId, guest, hotel, booking, room, amendment);
+    const refund = await loadRefundPrintInfo(req.nextUrl.searchParams.get("refundId"), booking.id, session.seatId);
+    const context = buildFormContext(formId, guest, hotel, booking, room, amendment, refund);
 
     const docxBuffer = renderGuestFormDocx(formId, context);
     const meta = GUEST_FORM_TEMPLATES[formId];
