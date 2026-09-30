@@ -33,6 +33,7 @@ export default function PlatformUsersPage() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [passwordDraft, setPasswordDraft] = useState<Record<string, string>>({});
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/platform/users");
@@ -44,7 +45,9 @@ export default function PlatformUsersPage() {
   }, []);
 
   useEffect(() => {
-    load().catch((e: Error) => setError(e.message));
+    load()
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoaded(true));
   }, [load]);
 
   async function toggleBlock(user: UserRow) {
@@ -197,7 +200,7 @@ export default function PlatformUsersPage() {
             {!users.length && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                  {error ? "" : "Загрузка…"}
+                  {error ? "" : loaded ? "Пользователей пока нет" : "Загрузка…"}
                 </td>
               </tr>
             )}

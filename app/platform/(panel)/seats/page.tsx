@@ -36,6 +36,7 @@ export default function PlatformSeatsPage() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   function load() {
     fetch("/api/platform/seats")
@@ -46,7 +47,8 @@ export default function PlatformSeatsPage() {
         if (!Array.isArray(rows)) throw new Error("Неверный формат ответа");
         setSeats(rows as SeatRow[]);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoaded(true));
   }
 
   useEffect(() => {
@@ -94,7 +96,9 @@ export default function PlatformSeatsPage() {
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
       {!seats.length && !error ? (
-        <p className="text-slate-500 text-sm">Загрузка…</p>
+        <p className="text-slate-500 text-sm">
+          {loaded ? "Сетей пока нет — создайте первого владельца." : "Загрузка…"}
+        </p>
       ) : (
         <div className="space-y-4">
           {seats.map((seat) => {
