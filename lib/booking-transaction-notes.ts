@@ -10,12 +10,11 @@ function dateForNight(checkIn: Date | string, nightIndex: number): Date {
   return d;
 }
 
+/** Период ночей как «заезд — выезд»: ночь 1 при заезде 30.09 → «30.09.2026 — 01.10.2026». */
 export function formatStayNightPeriod(checkIn: Date | string, fromNight: number, toNight: number): string {
   const start = dateForNight(checkIn, fromNight);
-  const end = dateForNight(checkIn, toNight);
-  const a = fmtDateRu(start);
-  const b = fmtDateRu(end);
-  return a === b ? a : `${a} — ${b}`;
+  const end = dateForNight(checkIn, toNight + 1);
+  return `${fmtDateRu(start)} — ${fmtDateRu(end)}`;
 }
 
 function nightsInAmount(amount: number, nightly: number): number {

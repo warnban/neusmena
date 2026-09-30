@@ -162,9 +162,25 @@ export function firstUnpaidNightDateKey(
   return mskAddDays(mskDateKey(booking.checkIn), prepaidNights(booking, paidOverride, transactions, refundNights));
 }
 
-/** Ночей от первой неоплаченной до даты «оплачено до» включительно. */
+/** Ночей от первой неоплаченной до даты «оплачено до 12:00» (как день выезда). */
 export function nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey: string, paidThroughKey: string): number {
-  return mskNightDiff(firstUnpaidKey, mskDayAfter(paidThroughKey));
+  return mskNightDiff(firstUnpaidKey, paidThroughKey);
+}
+
+/** Дата «оплачено до 12:00» после оплаты `nights` ночей начиная с первой неоплаченной. */
+export function paidThroughAfterNights(firstUnpaidKey: string, nights: number): string {
+  return mskAddDays(firstUnpaidKey, Math.max(0, nights));
+}
+
+/** «Оплачено до 01.10.2026 12:00» для ключа YYYY-MM-DD. */
+export function paidThroughNote(paidThroughKey: string): string {
+  const [y, m, d] = paidThroughKey.slice(0, 10).split("-");
+  return `Оплачено до ${d}.${m}.${y} 12:00`;
+}
+
+/** Проверка даты «оплачено до»: позже первой неоплаченной ночи и не позже выезда. */
+export function isValidPaidThrough(paidThroughKey: string, firstUnpaidKey: string, checkOutKey: string): boolean {
+  return paidThroughKey > firstUnpaidKey && paidThroughKey <= checkOutKey;
 }
 
 export function paymentDueInfo(booking: Booking, dateKey = mskDateKey(), transactions?: Transaction[]) {

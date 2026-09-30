@@ -162,7 +162,7 @@ export function BookingPaymentForm({
 
   const selectedPaidThrough = useMemo(() => {
     if (periodMode === "date" && paidThrough) return paidThrough;
-    return mskAddDays(firstUnpaidKey, selectedNights - 1);
+    return mskAddDays(firstUnpaidKey, selectedNights);
   }, [periodMode, paidThrough, firstUnpaidKey, selectedNights]);
 
   const isSplit = paymentSel.mode === "split";
@@ -206,7 +206,7 @@ export function BookingPaymentForm({
   );
 
   useEffect(() => {
-    setPaidThrough(mskAddDays(firstUnpaidKey, Math.max(0, selectedNights - 1)));
+    setPaidThrough(mskAddDays(firstUnpaidKey, Math.max(1, selectedNights)));
   }, [firstUnpaidKey, selectedNights]);
 
   async function handleSubmit() {
@@ -422,7 +422,7 @@ export function BookingPaymentForm({
               mode="iso"
               value={paidThrough}
               onChange={setPaidThrough}
-              min={firstUnpaidKey}
+              min={mskAddDays(firstUnpaidKey, 1)}
               max={maxPaidThroughKey}
               className="w-full"
             />

@@ -12,7 +12,10 @@ import { guessGenderFromName } from "@/lib/dorm";
 import { resolveRoomForBooking, hasBookingDateOverlap } from "@/lib/booking-availability.server";
 import {
   firstUnpaidNightDateKey,
+  isValidPaidThrough,
   nightsFromFirstUnpaidToPaidThrough,
+  paidThroughAfterNights,
+  paidThroughNote,
 } from "@/lib/booking-payment-due";
 import { mskAddDays, mskDateKey, mskNightDiff, mskDayAfter, parseMskDateKey } from "@/lib/msk-time";
 import { formatRuleLabel, hotelHasDiscountRules, validatePaymentDiscount } from "@/lib/hotel-discount-rules";
@@ -123,7 +126,7 @@ async function executeRecordPayment(
 
   let payNights = nights;
   if (paidThroughRaw) {
-    if (paidThroughRaw < firstUnpaidKey || paidThroughRaw > checkOutKey) {
+    if (!isValidPaidThrough(paidThroughRaw, firstUnpaidKey, checkOutKey)) {
       return { ok: false as const, error: "Некорректная дата «оплачено до»" };
     }
     payNights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
@@ -161,7 +164,7 @@ async function executeRecordPayment(
     channelId = channel.id;
   }
 
-  const paidThroughDate = paidThroughRaw || mskAddDays(firstUnpaidKey, payNights - 1);
+  const paidThroughDate = paidThroughRaw || paidThroughAfterNights(firstUnpaidKey, payNights);
   const appliedRule = validation.rule;
   const noteDiscount = appliedRule
     ? `Скидка: ${formatRuleLabel(appliedRule)}`
@@ -193,7 +196,7 @@ async function executeRecordPayment(
         discountPerNightApplied: validation.discountPerNight,
         note: buildAccommodationPaymentNote(bookingForNote, validation.expectedAmount, {
           paidBefore: booking.paid,
-          extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
+          extra: [paidThroughNote(paidThroughDate), noteDiscount].filter(Boolean).join(". "),
           userNote: note || null,
         }),
         ...(channelId ? { channelId } : {}),
@@ -210,7 +213,7 @@ async function executeRecordPayment(
 
   return {
     ok: true as const,
-    message: `Оплата ${validation.expectedAmount} ₽ проведена. ${booking.guestName}, оплачено до ${paidThroughDate} 12:00.`,
+    message: `Оплата ${validation.expectedAmount} ₽ проведена. ${booking.guestName}, ${paidThroughNote(paidThroughDate).toLowerCase()}.`,
   };
 }
 

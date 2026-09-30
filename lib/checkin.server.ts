@@ -35,7 +35,10 @@ import {
   bookingNightlyRate,
   bookingStayNights,
   firstUnpaidNightDateKey,
+  isValidPaidThrough,
   nightsFromFirstUnpaidToPaidThrough,
+  paidThroughAfterNights,
+  paidThroughNote,
 } from "@/lib/booking-payment-due";
 import { mskAddDays, mskDateKey, mskNightDiff } from "@/lib/msk-time";
 import { setBedStatus } from "@/lib/dorm.server";
@@ -112,7 +115,7 @@ export async function performCheckIn(
   let paymentNights = extrasOnly ? 0 : Math.max(1, Math.round(Number(input.paymentNights) || stayNights));
 
   if (paidThroughRaw) {
-    if (paidThroughRaw < firstUnpaidKey || paidThroughRaw > checkOutKey) {
+    if (!isValidPaidThrough(paidThroughRaw, firstUnpaidKey, checkOutKey)) {
       return { ok: false, error: "Некорректная дата «оплачено до»" };
     }
     paymentNights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
@@ -237,7 +240,7 @@ export async function performCheckIn(
     channelId = channel.id;
   }
 
-  const paidThroughDate = paidThroughRaw || mskAddDays(firstUnpaidKey, paymentNights - 1);
+  const paidThroughDate = paidThroughRaw || paidThroughAfterNights(firstUnpaidKey, paymentNights);
 
   const appliedRule = appliedRuleId ? discountRules.find((r) => r.id === appliedRuleId) : null;
   const noteDiscount = appliedRule
@@ -323,7 +326,7 @@ export async function performCheckIn(
     }
     const baseNote = buildAccommodationPaymentNote(bookingForNote, payNow - extras.sum, {
       paidBefore: booking.paid,
-      extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
+      extra: [paidThroughNote(paidThroughDate), noteDiscount].filter(Boolean).join(". "),
       userNote: input.note ?? null,
     });
     nightParts.forEach((part, i) => {
@@ -374,7 +377,7 @@ export async function performCheckIn(
           discountPerNightApplied: appliedPerNight,
           note: buildAccommodationPaymentNote(bookingForNote, nightsAmount, {
             paidBefore: booking.paid,
-            extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
+            extra: [paidThroughNote(paidThroughDate), noteDiscount].filter(Boolean).join(". "),
             userNote: input.note ?? null,
           }),
           ...(channelId ? { channelId } : {}),

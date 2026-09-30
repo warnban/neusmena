@@ -99,7 +99,7 @@ export const ASSISTANT_TOOLS = [
         properties: {
           bookingId: { type: "string" },
           nights: { type: "number" },
-          paidThroughDate: { type: "string", description: "YYYY-MM-DD альтернатива nights" },
+          paidThroughDate: { type: "string", description: "YYYY-MM-DD: до 12:00 какого дня оплачено (как дата выезда), альтернатива nights" },
         },
         required: ["bookingId"],
       },
@@ -429,10 +429,10 @@ export async function runAssistantTool(
 
       if (paidThroughRaw) {
         const checkOutKey = mskDateKey(booking.checkOut);
-        if (paidThroughRaw < firstUnpaid || paidThroughRaw > checkOutKey) {
+        if (paidThroughRaw <= firstUnpaid || paidThroughRaw > checkOutKey) {
           return { result: { error: "Некорректная дата «оплачено до»" } };
         }
-        nights = Math.max(1, mskNightDiff(firstUnpaid, mskAddDays(paidThroughRaw, 1)));
+        nights = Math.max(1, mskNightDiff(firstUnpaid, paidThroughRaw));
       }
 
       const hotelRules = activeRulesForHotel(discountRules, booking.hotelId);
@@ -454,7 +454,7 @@ export async function runAssistantTool(
           guestName: booking.guestName,
           nights,
           firstUnpaidNight: firstUnpaid,
-          paidThroughDate: paidThroughRaw || mskAddDays(firstUnpaid, nights - 1),
+          paidThroughDate: paidThroughRaw || mskAddDays(firstUnpaid, nights),
           amount,
           discountNote: matched ? formatRuleLabel(matched) : null,
         },

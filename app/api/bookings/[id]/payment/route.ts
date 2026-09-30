@@ -21,7 +21,10 @@ import {
   bookingNightlyRate,
   bookingStayNights,
   firstUnpaidNightDateKey,
+  isValidPaidThrough,
   nightsFromFirstUnpaidToPaidThrough,
+  paidThroughAfterNights,
+  paidThroughNote,
 } from "@/lib/booking-payment-due";
 import { mskAddDays, mskDateKey, mskNightDiff } from "@/lib/msk-time";
 import {
@@ -109,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     let nights = extrasOnly ? 0 : Math.max(1, Math.round(Number(body.nights) || 0));
 
     if (paidThroughRaw) {
-      if (paidThroughRaw < firstUnpaidKey || paidThroughRaw > checkOutKey) {
+      if (!isValidPaidThrough(paidThroughRaw, firstUnpaidKey, checkOutKey)) {
         return NextResponse.json({ error: "Некорректная дата «оплачено до»" }, { status: 400 });
       }
       nights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
@@ -124,7 +127,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Слишком много ночей для оплаты" }, { status: 400 });
     }
 
-    const paidThroughDateResolved = paidThroughRaw || mskAddDays(firstUnpaidKey, nights - 1);
+    const paidThroughDateResolved = paidThroughRaw || paidThroughAfterNights(firstUnpaidKey, nights);
 
     const extraTxData = (code: StayExtraCode, method: string, amount: number, extra: Partial<Prisma.TransactionUncheckedCreateInput> = {}) =>
       prisma.transaction.create({
@@ -178,7 +181,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       };
       const baseNote = buildAccommodationPaymentNote(bookingForNote, total - extrasSum, {
         paidBefore: booking.paid,
-        extra: `Оплачено до ${paidThroughDateResolved} 12:00`,
+        extra: paidThroughNote(paidThroughDateResolved),
         userNote: body.note ?? null,
       });
 
@@ -270,7 +273,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       channelId = channel.id;
     }
 
-    const paidThroughDate = paidThroughRaw || mskAddDays(firstUnpaidKey, nights - 1);
+    const paidThroughDate = paidThroughRaw || paidThroughAfterNights(firstUnpaidKey, nights);
     const discountChanged =
       !extrasOnly &&
       !useRules &&
@@ -310,7 +313,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           discountPerNightApplied: validation.discountPerNight,
           note: buildAccommodationPaymentNote(bookingForNote, validation.expectedAmount, {
             paidBefore: booking.paid,
-            extra: [`Оплачено до ${paidThroughDate} 12:00`, noteDiscount].filter(Boolean).join(". "),
+            extra: [paidThroughNote(paidThroughDate), noteDiscount].filter(Boolean).join(". "),
             userNote: body.note ?? null,
           }),
           ...(channelId ? { channelId } : {}),
