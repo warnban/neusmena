@@ -1,12 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Check, X } from "lucide-react";
 import { crmAppUrl } from "@/lib/host-routing";
 
 export default function VerifyEmailPage() {
+  return (
+    <Suspense>
+      <VerifyEmail />
+    </Suspense>
+  );
+}
+
+function VerifyEmail() {
   const params = useSearchParams();
   const token = params.get("token");
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
