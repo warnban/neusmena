@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { calcStayAmount } from "@/lib/booking-pricing";
 import { mskNightDiff, mskDateKey } from "@/lib/msk-time";
 import { resolveRoomForBooking } from "@/lib/booking-availability.server";
+import { guessGenderFromName } from "@/lib/dorm";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
     phone = "",
     email = "",
     isForeigner = false,
+    gender: genderIn,
     checkIn,
     checkOut,
     source = "direct",
@@ -67,6 +69,11 @@ export async function POST(req: NextRequest) {
     : null;
   if (guestId && !existingGuest) return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
 
+  const gender: "M" | "F" | null =
+    genderIn === "M" || genderIn === "F"
+      ? genderIn
+      : existingGuest?.gender ?? guessGenderFromName(String(guestName ?? ""));
+
   if (bedIdIn && room.kind !== "dorm") {
     return NextResponse.json({ error: "Койко-место указывается только для общих комнат" }, { status: 400 });
   }
@@ -80,7 +87,7 @@ export async function POST(req: NextRequest) {
     checkOut: checkOutKey,
     roomId,
     bedId: bedId ?? undefined,
-    guestGender: existingGuest?.gender ?? null,
+    guestGender: gender,
   });
   if (!resolved.ok) {
     return NextResponse.json({ error: resolved.error }, { status: 400 });
@@ -106,6 +113,7 @@ export async function POST(req: NextRequest) {
           visits: { increment: 1 },
           ...(phone.trim() ? { phone: phone.trim() } : {}),
           ...(email.trim() ? { email: email.trim() } : {}),
+          ...(gender ? { gender } : {}),
         },
       });
     } else {
@@ -120,6 +128,7 @@ export async function POST(req: NextRequest) {
           phone: phone.trim(),
           email: email.trim(),
           isForeigner: Boolean(isForeigner),
+          ...(gender ? { gender } : {}),
           country: isForeigner ? "" : "Россия",
           nationality: isForeigner ? "" : "RU",
           migRegRequired: Boolean(isForeigner),

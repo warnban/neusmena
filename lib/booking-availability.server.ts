@@ -293,6 +293,9 @@ export async function resolveRoomForBooking(params: {
     if (bed.status === "maintenance" || bed.room.status === "maintenance") {
       return { ok: false, error: "Койко-место на ремонте" };
     }
+    if (!guestGender && bed.room.dormGender && bed.room.dormGender !== "mixed") {
+      return { ok: false, error: `Комната ${bed.room.number} — ${bed.room.dormGender === "male" ? "мужская" : "женская"}: укажите пол гостя` };
+    }
     if (!guestGenderMatchesDorm(guestGender, bed.room.dormGender)) {
       return {
         ok: false,
@@ -324,6 +327,9 @@ export async function resolveRoomForBooking(params: {
     }
 
     if (room.kind === "dorm") {
+      if (!guestGender && room.dormGender && room.dormGender !== "mixed") {
+        return { ok: false, error: `Комната ${room.number} — ${room.dormGender === "male" ? "мужская" : "женская"}: укажите пол гостя` };
+      }
       if (!guestGenderMatchesDorm(guestGender, room.dormGender)) {
         return {
           ok: false,

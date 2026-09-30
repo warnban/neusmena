@@ -8,6 +8,7 @@ import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import { calcStayAmount } from "@/lib/booking-pricing";
 import { stayExtrasTotal } from "@/lib/stay-extras";
 import { formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
+import { guessGenderFromName } from "@/lib/dorm";
 import { resolveRoomForBooking, hasBookingDateOverlap } from "@/lib/booking-availability.server";
 import {
   firstUnpaidNightDateKey,
@@ -422,7 +423,7 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
     checkOut,
     roomId: roomId || undefined,
     bedId: bedIdRaw ?? undefined,
-    guestGender: existingGuest?.gender ?? null,
+    guestGender: existingGuest?.gender ?? guessGenderFromName(guestName),
     guestId: existingGuest?.id,
     anyAvailable: !roomId && !bedIdRaw,
   });
@@ -452,6 +453,7 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
             middleName: guestName.split(/\s+/).slice(2).join(" "),
             phone,
             isForeigner,
+            ...(guessGenderFromName(guestName) ? { gender: guessGenderFromName(guestName)! } : {}),
             country: isForeigner ? "" : "Россия",
             nationality: isForeigner ? "" : "RU",
             migRegRequired: isForeigner,

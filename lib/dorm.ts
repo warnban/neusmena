@@ -11,6 +11,20 @@ export function guestGenderMatchesDorm(
   return true;
 }
 
+/** Пол по русскому ФИО «Фамилия Имя Отчество»: сначала по отчеству, затем по фамилии. */
+export function guessGenderFromName(fullName: string): "M" | "F" | null {
+  const parts = fullName.toLowerCase().replace(/ё/g, "е").split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  for (const p of parts.slice(2)) {
+    if (/(ич|оглы|улы)$/.test(p)) return "M";
+    if (/(вна|чна|шна|кызы|гызы)$/.test(p)) return "F";
+  }
+  const last = parts[0]!;
+  if (/(ова|ева|ина|ына|ская|цкая)$/.test(last)) return "F";
+  if (/(ов|ев|ин|ын|ский|цкий)$/.test(last)) return "M";
+  return null;
+}
+
 export function formatBedDisplay(bedLabel: string): string {
   return bedLabel;
 }

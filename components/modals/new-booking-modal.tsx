@@ -5,7 +5,7 @@ import { X, Globe, AlertTriangle } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { money, dayDiff } from "@/lib/format";
 import { DORM_GENDER_LABELS } from "@/lib/constants";
-import { formatBookingPlaceOptionLabel, guestGenderMatchesDorm } from "@/lib/dorm";
+import { formatBookingPlaceOptionLabel, guessGenderFromName, guestGenderMatchesDorm } from "@/lib/dorm";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PhoneInput, getPhoneError } from "@/components/ui/phone-input";
 import { Select } from "@/components/ui/select";
@@ -45,6 +45,8 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [isForeigner, setIsForeigner] = useState(false);
+  const [gender, setGender] = useState<"M" | "F" | null>(null);
+  const [genderTouched, setGenderTouched] = useState(false);
   const [checkIn, setCheckIn] = useState(() => new Date().toISOString().slice(0, 10));
   const [checkOut, setCheckOut] = useState(() => {
     const d = new Date();
@@ -97,13 +99,9 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
     return Math.max(1, dayDiff(new Date(checkIn), new Date(checkOut)));
   }, [checkIn, checkOut]);
 
-  const genderMismatch = Boolean(
-    isDorm &&
-    selectedRoom?.dormGender &&
-    selectedRoom.dormGender !== "mixed" &&
-    selectedGuest &&
-    !guestGenderMatchesDorm(selectedGuest.gender, selectedRoom.dormGender)
-  );
+  const genderedDorm = Boolean(isDorm && selectedRoom?.dormGender && selectedRoom.dormGender !== "mixed");
+  const needGender = genderedDorm && !gender;
+  const genderMismatch = Boolean(genderedDorm && gender && !guestGenderMatchesDorm(gender, selectedRoom?.dormGender));
 
   const placeOptions = useMemo(() => {
     const sorted = [...availSlots].sort((a, b) => {
@@ -138,7 +136,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
       checkIn,
       checkOut,
     });
-    if (selectedGuestId) params.set("guestId", selectedGuestId);
+    if (gender) params.set("guestGender", gender);
 
     let cancelled = false;
     setAvailLoading(true);
@@ -157,7 +155,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [activeHotelId, checkIn, checkOut, selectedGuestId]);
+  }, [activeHotelId, checkIn, checkOut, gender]);
 
   useEffect(() => {
     if (placeId && !availSlots.some((s) => s.id === placeId)) {
@@ -174,16 +172,24 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
     setPhone(g.phone);
     setEmail(g.email);
     setIsForeigner(g.isForeigner);
-    setPlaceId("");
+    setGender(g.gender ?? guessGenderFromName(g.name));
+    setGenderTouched(true);
+  }
+
+  function chooseGender(g: "M" | "F") {
+    setGender(g);
+    setGenderTouched(true);
   }
 
   function onGuestNameChange(value: string) {
     setGuestName(value);
+    if (!genderTouched) setGender(guessGenderFromName(value));
     if (selectedGuestId) {
       const current = guests.find((g) => g.id === selectedGuestId);
       if (!current || value.trim() !== current.name) {
         setSelectedGuestId("");
-        setPlaceId("");
+        setGenderTouched(false);
+        setGender(guessGenderFromName(value));
       }
     }
   }
@@ -197,6 +203,10 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
     }
     if (!selectedSlot) {
       setError("Выберите номер или койко-место");
+      return;
+    }
+    if (needGender) {
+      setError("Укажите пол гостя — выбрана мужская или женская комната");
       return;
     }
     if (genderMismatch) {
@@ -238,6 +248,7 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
           phone,
           email,
           isForeigner: selectedGuestId ? undefined : isForeigner,
+          gender: gender ?? undefined,
           checkIn,
           checkOut,
           source,
@@ -279,13 +290,39 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
           )}
 
           <div>
-            <label className="text-[11px] font-bold text-muted-foreground block mb-1">ФИО гостя</label>
-            <input
-              value={guestName}
-              onChange={(e) => onGuestNameChange(e.target.value)}
-              placeholder="Иванов Иван Иванович"
-              className="w-full px-3 py-2 text-[13px] rounded-xl border border-border bg-muted text-foreground outline-none focus:ring-1 focus:ring-ring"
-            />
+            <label className="text-[11px] font-bold text-muted-foreground block mb-1">ФИО гостя и пол</label>
+            <div className="flex gap-2">
+              <input
+                value={guestName}
+                onChange={(e) => onGuestNameChange(e.target.value)}
+                placeholder="Иванов Иван Иванович"
+                className="min-w-0 flex-1 px-3 py-2 text-[13px] rounded-xl border border-border bg-muted text-foreground outline-none focus:ring-1 focus:ring-ring"
+              />
+              <div
+                role="radiogroup"
+                aria-label="Пол гостя"
+                className={`flex shrink-0 gap-1 rounded-xl p-1 ${needGender ? "bg-destructive/10 ring-1 ring-destructive/40" : "bg-muted"}`}
+              >
+                {(["M", "F"] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    role="radio"
+                    aria-checked={gender === g}
+                    title={g === "M" ? "Мужчина" : "Женщина"}
+                    onClick={() => chooseGender(g)}
+                    className={`w-9 rounded-lg text-[13px] font-black transition-colors ${
+                      gender === g ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {g === "M" ? "М" : "Ж"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {gender && !genderTouched && (
+              <p className="mt-1 text-[10px] text-muted-foreground">Пол определён по ФИО — нажмите М или Ж, если неверно</p>
+            )}
             {showGuestSuggestions && (
               <div className="mt-1 border border-border rounded-xl overflow-hidden bg-card shadow-lg">
                 {guestMatches.map((g) => (
@@ -346,9 +383,6 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
                 <div className="mt-2 p-3 rounded-xl bg-muted/60 border border-border text-[12px]">
                   <span className="font-bold text-foreground">{selectedGuest.name}</span>
                   <span className="text-muted-foreground ml-2">из базы</span>
-                  <span className="text-muted-foreground ml-2">
-                    {selectedGuest.gender === "M" ? "муж." : "жен."}
-                  </span>
                   {selectedGuest.isForeigner && <span className="ml-2 text-[#D97706] font-semibold">иностранец</span>}
                 </div>
                 <GuestFlagWarning guest={selectedGuest} className="mt-2" />
@@ -393,8 +427,9 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
               />
             )}
             {isDorm && selectedRoom?.dormGender && (
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <p className={`text-[11px] mt-1 ${needGender ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
                 {DORM_GENDER_LABELS[selectedRoom.dormGender]} общая комната
+                {needGender ? " — укажите пол гостя (М / Ж рядом с ФИО)" : ""}
               </p>
             )}
           </div>
