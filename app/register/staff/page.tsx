@@ -24,7 +24,6 @@ function StaffRegisterForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -56,10 +55,6 @@ function StaffRegisterForm() {
         setError(data.error || "Ошибка регистрации");
         return;
       }
-      if (data.needsEmailVerification) {
-        setDone(true);
-        return;
-      }
       router.push("/dashboard");
       router.refresh();
     } finally {
@@ -80,18 +75,6 @@ function StaffRegisterForm() {
     return (
       <div className="w-full max-w-md bg-card rounded-2xl border border-border shadow-xl p-8 text-center text-muted-foreground">
         Загрузка приглашения…
-      </div>
-    );
-  }
-
-  if (done) {
-    return (
-      <div className="w-full max-w-md bg-card rounded-2xl border border-border shadow-xl p-8 text-center">
-        <h1 className="text-xl font-black text-foreground mb-2">Проверьте почту</h1>
-        <p className="text-sm text-muted-foreground mb-6">
-          Мы отправили письмо на <strong className="text-foreground">{email}</strong>. Подтвердите email, затем войдите в CRM.
-        </p>
-        <Link href="/login" className="text-primary font-semibold hover:underline">Перейти ко входу</Link>
       </div>
     );
   }

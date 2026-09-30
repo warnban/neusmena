@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { issueEmailVerification } from "@/lib/email-verify.server";
+import { generateToken, setAuthCookie } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
         name: name.trim(),
         role: invite.role,
         seatId: invite.seatId,
+        emailVerifiedAt: new Date(),
       },
     });
 
@@ -83,11 +84,17 @@ export async function POST(req: NextRequest) {
     return { user, staff };
   });
 
-  await issueEmailVerification(result.user.id, normalizedEmail, name.trim());
+  const authToken = await generateToken({
+    userId: result.user.id,
+    seatId: invite.seatId,
+    email: result.user.email,
+    role: result.user.role,
+    staffId: result.staff.id,
+  });
+  await setAuthCookie(authToken);
 
   return NextResponse.json({
     ok: true,
-    needsEmailVerification: true,
     user: { id: result.user.id, email: result.user.email, name: result.user.name, role: invite.role },
   });
 }

@@ -28,13 +28,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Аккаунт не привязан к сети" }, { status: 403 });
   }
 
-  if (!user.emailVerifiedAt) {
-    return NextResponse.json(
-      { error: "Подтвердите email — проверьте почту или запросите новое письмо у администратора." },
-      { status: 403 }
-    );
-  }
-
   const token = await generateToken({
     userId: user.id,
     seatId: user.seatId,
