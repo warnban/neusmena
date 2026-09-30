@@ -407,39 +407,11 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
     return { ok: false as const, error: "Дата выезда должна быть позже заезда" };
   }
 
-  let guest;
-  if (guestId) {
-    guest = await prisma.guest.findFirst({
-      where: { id: guestId, seatId: session.seatId! },
-    });
-    if (!guest) return { ok: false as const, error: "Гость не найден" };
-    guest = await prisma.guest.update({
-      where: { id: guest.id },
-      data: {
-        visits: { increment: 1 },
-        ...(phone ? { phone } : {}),
-      },
-    });
-  } else {
-    if (!guestName) return { ok: false as const, error: "Укажите ФИО гостя" };
-    const nameParts = guestName.split(/\s+/);
-    guest = await prisma.guest.create({
-      data: {
-        seatId: session.seatId!,
-        name: guestName,
-        lastName: nameParts[0] ?? "",
-        firstName: nameParts[1] ?? "",
-        middleName: nameParts.slice(2).join(" "),
-        phone,
-        isForeigner,
-        country: isForeigner ? "" : "Россия",
-        nationality: isForeigner ? "" : "RU",
-        migRegRequired: isForeigner,
-        migRegStatus: isForeigner ? "pending" : "not_required",
-        visits: 1,
-      },
-    });
-  }
+  const existingGuest = guestId
+    ? await prisma.guest.findFirst({ where: { id: guestId, seatId: session.seatId! } })
+    : null;
+  if (guestId && !existingGuest) return { ok: false as const, error: "Гость не найден" };
+  if (!existingGuest && !guestName) return { ok: false as const, error: "Укажите ФИО гостя" };
 
   // Единая точка проверки доступности + подбора койки: те же инварианты,
   // что и в обычном POST /api/bookings, включая overlap с organization-stays.
@@ -450,8 +422,8 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
     checkOut,
     roomId: roomId || undefined,
     bedId: bedIdRaw ?? undefined,
-    guestGender: guest.gender,
-    guestId: guest.id,
+    guestGender: existingGuest?.gender ?? null,
+    guestId: existingGuest?.id,
     anyAvailable: !roomId && !bedIdRaw,
   });
   if (!resolve.ok) return { ok: false as const, error: resolve.error };
@@ -465,21 +437,45 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
     checkOut: checkOutDate,
   });
 
-  const booking = await prisma.booking.create({
-    data: {
-      hotelId,
-      roomId: room.id,
-      bedId,
-      guestId: guest.id,
-      guestName: guest.name,
-      checkIn: checkInDate,
-      checkOut: checkOutDate,
-      source: "direct",
-      status: "new",
-      amount,
-      guests: 1,
-      paid: 0,
-    },
+  const { booking, guest } = await prisma.$transaction(async (tx) => {
+    const guest = existingGuest
+      ? await tx.guest.update({
+          where: { id: existingGuest.id },
+          data: { visits: { increment: 1 }, ...(phone ? { phone } : {}) },
+        })
+      : await tx.guest.create({
+          data: {
+            seatId: session.seatId!,
+            name: guestName,
+            lastName: guestName.split(/\s+/)[0] ?? "",
+            firstName: guestName.split(/\s+/)[1] ?? "",
+            middleName: guestName.split(/\s+/).slice(2).join(" "),
+            phone,
+            isForeigner,
+            country: isForeigner ? "" : "Россия",
+            nationality: isForeigner ? "" : "RU",
+            migRegRequired: isForeigner,
+            migRegStatus: isForeigner ? "pending" : "not_required",
+            visits: 1,
+          },
+        });
+    const booking = await tx.booking.create({
+      data: {
+        hotelId,
+        roomId: room.id,
+        bedId,
+        guestId: guest.id,
+        guestName: guest.name,
+        checkIn: checkInDate,
+        checkOut: checkOutDate,
+        source: "direct",
+        status: "new",
+        amount,
+        guests: 1,
+        paid: 0,
+      },
+    });
+    return { booking, guest };
   });
 
   const bed = bedId ? await prisma.bed.findUnique({ where: { id: bedId } }) : null;

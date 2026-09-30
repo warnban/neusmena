@@ -75,6 +75,17 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
   }, [guests, guestName]);
 
   const selectedGuest = guests.find((g) => g.id === selectedGuestId);
+
+  const [notDuplicateId, setNotDuplicateId] = useState("");
+  const duplicateGuest = useMemo(() => {
+    if (selectedGuestId) return null;
+    const name = normalizeName(guestName);
+    const byName = name.split(" ").length >= 2 ? guests.find((g) => normalizeName(g.name) === name) : undefined;
+    if (byName) return byName;
+    const digits = phoneKey(phone);
+    return digits.length === 10 ? guests.find((g) => phoneKey(g.phone) === digits) ?? null : null;
+  }, [guests, guestName, phone, selectedGuestId]);
+  const duplicateUnresolved = Boolean(duplicateGuest && notDuplicateId !== duplicateGuest.id);
   const showGuestSuggestions = guestName.trim().length >= 2 && !selectedGuestId && guestMatches.length > 0;
 
   const selectedSlot = availSlots.find((s) => s.id === placeId);
@@ -200,6 +211,10 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
       setError("Укажите ФИО гостя");
       return;
     }
+    if (duplicateUnresolved) {
+      setError("Этот гость уже есть в базе — выберите его или отметьте, что это другой человек");
+      return;
+    }
     const phoneErr = getPhoneError(phone);
     if (phoneErr) {
       setError(phoneErr);
@@ -295,6 +310,35 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+            {duplicateGuest && duplicateUnresolved && (
+              <div className="mt-2 p-3 rounded-xl border border-warning/40 bg-warning/10 text-[12px] space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-warning flex-shrink-0 mt-0.5" />
+                  <span className="text-foreground">
+                    В базе уже есть гость <b>{duplicateGuest.name}</b>
+                    {duplicateGuest.phone ? `, ${duplicateGuest.phone}` : ""} · {duplicateGuest.visits} визит(ов).
+                    Выберите его, чтобы не создавать дубль.
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => pickGuest(duplicateGuest)}
+                    className="px-3 py-1.5 rounded-lg text-white text-[12px] font-bold"
+                    style={{ background: "hsl(var(--primary))" }}
+                  >
+                    Выбрать этого гостя
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNotDuplicateId(duplicateGuest.id)}
+                    className="px-3 py-1.5 rounded-lg border border-border text-[12px] font-bold text-muted-foreground hover:bg-muted"
+                  >
+                    Это другой человек
+                  </button>
+                </div>
               </div>
             )}
             {selectedGuest && (
@@ -435,4 +479,12 @@ export function NewBookingModal({ onClose, onCreated }: Props) {
         </div>
     </Modal>
   );
+}
+
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
+}
+
+function phoneKey(s: string): string {
+  return s.replace(/\D/g, "").slice(-10);
 }

@@ -62,46 +62,10 @@ export async function POST(req: NextRequest) {
   const checkInKey = mskDateKey(checkInDate);
   const checkOutKey = mskDateKey(checkOutDate);
 
-  let guest;
-
-  if (guestId) {
-    guest = await prisma.guest.findFirst({
-      where: { id: guestId, seatId: session.seatId },
-    });
-    if (!guest) return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
-
-    guest = await prisma.guest.update({
-      where: { id: guest.id },
-      data: {
-        visits: { increment: 1 },
-        ...(phone.trim() ? { phone: phone.trim() } : {}),
-        ...(email.trim() ? { email: email.trim() } : {}),
-      },
-    });
-  } else {
-    const nameParts = guestName!.trim().split(/\s+/);
-    const lastName = nameParts[0] ?? "";
-    const firstName = nameParts[1] ?? "";
-    const middleName = nameParts.slice(2).join(" ");
-
-    guest = await prisma.guest.create({
-      data: {
-        seatId: session.seatId,
-        name: guestName!.trim(),
-        lastName,
-        firstName,
-        middleName,
-        phone: phone.trim(),
-        email: email.trim(),
-        isForeigner: Boolean(isForeigner),
-        country: isForeigner ? "" : "Россия",
-        nationality: isForeigner ? "" : "RU",
-        migRegRequired: Boolean(isForeigner),
-        migRegStatus: isForeigner ? "pending" : "not_required",
-        visits: 1,
-      },
-    });
-  }
+  const existingGuest = guestId
+    ? await prisma.guest.findFirst({ where: { id: guestId, seatId: session.seatId } })
+    : null;
+  if (guestId && !existingGuest) return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
 
   if (bedIdIn && room.kind !== "dorm") {
     return NextResponse.json({ error: "Койко-место указывается только для общих комнат" }, { status: 400 });
@@ -116,7 +80,7 @@ export async function POST(req: NextRequest) {
     checkOut: checkOutKey,
     roomId,
     bedId: bedId ?? undefined,
-    guestGender: guest.gender,
+    guestGender: existingGuest?.gender ?? null,
   });
   if (!resolved.ok) {
     return NextResponse.json({ error: resolved.error }, { status: 400 });
@@ -133,23 +97,57 @@ export async function POST(req: NextRequest) {
     ? await prisma.channel.findFirst({ where: { hotelId, code: sourceKey } })
     : null;
 
-  const booking = await prisma.booking.create({
-    data: {
-      hotelId,
-      roomId,
-      bedId,
-      guestId: guest.id,
-      guestName: guest.name,
-      checkIn: checkInDate,
-      checkOut: checkOutDate,
-      source: sourceKey,
-      channelId: channel?.id ?? null,
-      status: "new",
-      amount,
-      guests: Math.max(1, Number(guests) || 1),
-      paid: 0,
-      notes: notes.trim(),
-    },
+  const { booking, guest } = await prisma.$transaction(async (tx) => {
+    let guest;
+    if (existingGuest) {
+      guest = await tx.guest.update({
+        where: { id: existingGuest.id },
+        data: {
+          visits: { increment: 1 },
+          ...(phone.trim() ? { phone: phone.trim() } : {}),
+          ...(email.trim() ? { email: email.trim() } : {}),
+        },
+      });
+    } else {
+      const nameParts = guestName!.trim().split(/\s+/);
+      guest = await tx.guest.create({
+        data: {
+          seatId: session.seatId!,
+          name: guestName!.trim(),
+          lastName: nameParts[0] ?? "",
+          firstName: nameParts[1] ?? "",
+          middleName: nameParts.slice(2).join(" "),
+          phone: phone.trim(),
+          email: email.trim(),
+          isForeigner: Boolean(isForeigner),
+          country: isForeigner ? "" : "Россия",
+          nationality: isForeigner ? "" : "RU",
+          migRegRequired: Boolean(isForeigner),
+          migRegStatus: isForeigner ? "pending" : "not_required",
+          visits: 1,
+        },
+      });
+    }
+
+    const booking = await tx.booking.create({
+      data: {
+        hotelId,
+        roomId,
+        bedId,
+        guestId: guest.id,
+        guestName: guest.name,
+        checkIn: checkInDate,
+        checkOut: checkOutDate,
+        source: sourceKey,
+        channelId: channel?.id ?? null,
+        status: "new",
+        amount,
+        guests: Math.max(1, Number(guests) || 1),
+        paid: 0,
+        notes: notes.trim(),
+      },
+    });
+    return { booking, guest };
   });
 
   return NextResponse.json({ ok: true, booking, guest });
