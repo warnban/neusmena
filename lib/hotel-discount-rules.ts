@@ -49,6 +49,21 @@ export function ruleMatches(
   return true;
 }
 
+/** Почему правило не подходит к оплате; null — условия выполнены. */
+export function ruleUnmetReason(
+  rule: HotelDiscountRule,
+  params: { paymentNights: number; paymentMethod: string },
+  pmLabels?: Record<string, string>
+): string | null {
+  if (!rule.active) return "скидка отключена";
+  if (rule.discountPercent <= 0 && rule.discountPerNight <= 0) return "размер скидки не задан";
+  if (params.paymentNights < rule.minNights) return `нужна оплата от ${rule.minNights} ноч.`;
+  if (rule.paymentMethod && rule.paymentMethod !== params.paymentMethod) {
+    return `только при оплате «${pmLabels?.[rule.paymentMethod] ?? rule.paymentMethod}»`;
+  }
+  return null;
+}
+
 /** Лучшее правило: максимальный minNights среди подходящих (наиболее выгодный tier). */
 export function matchDiscountRule(
   rules: HotelDiscountRule[],
@@ -111,39 +126,40 @@ export function validatePaymentDiscount(params: {
   discountPerNight: number;
 } | { ok: false; error: string } {
   const hotelRules = activeRulesForHotel(params.rules, params.hotelId);
-  const matched = matchDiscountRule(hotelRules, {
-    paymentNights: params.paymentNights,
-    paymentMethod: params.paymentMethod,
-  });
 
   if (hotelRules.length > 0) {
     const fullAmount = calcPaymentWithRule(params.roomPrice, params.paymentNights, null);
 
-    if (matched) {
-      const expectedAmount = calcPaymentWithRule(params.roomPrice, params.paymentNights, matched);
-      if (Math.abs(params.amount - expectedAmount) > 1) {
-        if (Math.abs(params.amount - fullAmount) <= 1) {
-          return { ok: false, error: "При данных условиях необходимо применить скидку" };
-        }
-        return { ok: false, error: "Сумма не совпадает с тарифом и скидкой" };
+    if (params.discountRuleId) {
+      const chosen = hotelRules.find((r) => r.id === params.discountRuleId);
+      if (!chosen) {
+        return { ok: false, error: "Выбранная скидка не найдена или отключена" };
       }
-      if (params.discountRuleId && params.discountRuleId !== matched.id) {
-        return { ok: false, error: "Выбранная скидка не соответствует условиям оплаты" };
+      const unmet = ruleUnmetReason(chosen, {
+        paymentNights: params.paymentNights,
+        paymentMethod: params.paymentMethod,
+      });
+      if (unmet) {
+        return { ok: false, error: `Условия скидки не выполнены: ${unmet}` };
+      }
+      const expectedAmount = calcPaymentWithRule(params.roomPrice, params.paymentNights, chosen);
+      if (Math.abs(params.amount - expectedAmount) > 1) {
+        return { ok: false, error: "Сумма не совпадает с тарифом и скидкой" };
       }
       return {
         ok: true,
-        rule: matched,
+        rule: chosen,
         expectedAmount,
-        discountPercent: matched.discountPercent,
-        discountPerNight: matched.discountPerNight,
+        discountPercent: chosen.discountPercent,
+        discountPerNight: chosen.discountPerNight,
       };
     }
 
     if (Math.abs(params.amount - fullAmount) > 1) {
       return { ok: false, error: "Сумма не совпадает с тарифом" };
     }
-    if ((params.discountPercent ?? 0) > 0 || (params.discountPerNight ?? 0) > 0 || params.discountRuleId) {
-      return { ok: false, error: "Скидка недоступна при текущих условиях оплаты" };
+    if ((params.discountPercent ?? 0) > 0 || (params.discountPerNight ?? 0) > 0) {
+      return { ok: false, error: "Выберите скидку из правил отеля" };
     }
     return {
       ok: true,

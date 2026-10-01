@@ -101,7 +101,7 @@ describe("validatePaymentDiscount", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("с правилами: требует применить скидку, если оплачена полная цена", () => {
+  it("с правилами: полная цена без выбора скидки — ок", () => {
     const rules = [rule({ id: "b", minNights: 2, discountPercent: 10 })];
     const res = validatePaymentDiscount({
       rules,
@@ -111,12 +111,16 @@ describe("validatePaymentDiscount", () => {
       paymentMethod: "cash",
       amount: 2000,
     });
-    expect(res.ok).toBe(false);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.expectedAmount).toBe(2000);
+      expect(res.rule).toBeNull();
+    }
   });
 
-  it("с правилами: принимает сумму со скидкой", () => {
+  it("с правилами: скидка только если явно выбрана", () => {
     const rules = [rule({ id: "b", minNights: 2, discountPercent: 10 })];
-    const res = validatePaymentDiscount({
+    const withoutId = validatePaymentDiscount({
       rules,
       hotelId: "h1",
       roomPrice: 1000,
@@ -124,10 +128,35 @@ describe("validatePaymentDiscount", () => {
       paymentMethod: "cash",
       amount: 1800,
     });
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(res.expectedAmount).toBe(1800);
-      expect(res.rule?.id).toBe("b");
+    expect(withoutId.ok).toBe(false);
+
+    const withId = validatePaymentDiscount({
+      rules,
+      hotelId: "h1",
+      roomPrice: 1000,
+      paymentNights: 2,
+      paymentMethod: "cash",
+      amount: 1800,
+      discountRuleId: "b",
+    });
+    expect(withId.ok).toBe(true);
+    if (withId.ok) {
+      expect(withId.expectedAmount).toBe(1800);
+      expect(withId.rule?.id).toBe("b");
     }
+  });
+
+  it("с правилами: отказ, если условия выбранной скидки не выполнены", () => {
+    const rules = [rule({ id: "b", minNights: 5, discountPercent: 10 })];
+    const res = validatePaymentDiscount({
+      rules,
+      hotelId: "h1",
+      roomPrice: 1000,
+      paymentNights: 2,
+      paymentMethod: "cash",
+      amount: 1800,
+      discountRuleId: "b",
+    });
+    expect(res.ok).toBe(false);
   });
 });

@@ -82,7 +82,7 @@ export function HotelDiscountRulesEditor({
         <Percent size={14} className="text-muted-foreground" />
         <div>
           <h3 className="text-[13px] font-bold text-foreground">Скидки за предоплату</h3>
-          <p className="text-[11px] text-muted-foreground">Условия применяются к каждой отдельной оплате проживания</p>
+          <p className="text-[11px] text-muted-foreground">Администратор выбирает скидку при оплате — она применится, только если условия выполнены</p>
         </div>
       </div>
       <div className="p-5 space-y-4">

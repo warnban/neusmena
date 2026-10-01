@@ -26,8 +26,8 @@ import {
   calcPaymentWithRule,
   formatRuleLabel,
   hotelHasDiscountRules,
-  matchDiscountRule,
   paymentNightlyWithRule,
+  ruleUnmetReason,
 } from "@/lib/hotel-discount-rules";
 import type { Booking, Transaction } from "@/lib/types";
 import {
@@ -84,6 +84,8 @@ export function BookingPaymentForm({
 
   const [discountPercent, setDiscountPercent] = useState(String(booking.discountPercent ?? 0));
   const [discountPerNight, setDiscountPerNight] = useState(String(booking.discountPerNight ?? 0));
+  /** Выбранное правило отеля; пустая строка = без скидки. */
+  const [selectedRuleId, setSelectedRuleId] = useState("");
   const [periodMode, setPeriodMode] = useState<PeriodMode>("nights");
   const [nightsCount, setNightsCount] = useState("1");
   const [paidThrough, setPaidThrough] = useState("");
@@ -168,15 +170,28 @@ export function BookingPaymentForm({
   const isSplit = paymentSel.mode === "split";
   const method = paymentSel.mode === "single" ? paymentSel.method : (paymentSel.parts[0]?.method ?? "cash");
 
-  const matchedRule = useMemo(() => {
-    if (!useRules || isSplit) return null;
-    return matchDiscountRule(hotelRules, { paymentNights: selectedNights, paymentMethod: method });
-  }, [useRules, isSplit, hotelRules, selectedNights, method]);
+  const pmEntries = Object.entries(pmConfig);
+  const pmLabels = useMemo(
+    () => Object.fromEntries(pmEntries.map(([k, v]) => [k, v.label])),
+    [pmEntries]
+  );
+
+  const selectedRule = useMemo(() => {
+    if (!useRules || isSplit || !selectedRuleId) return null;
+    return hotelRules.find((r) => r.id === selectedRuleId) ?? null;
+  }, [useRules, isSplit, selectedRuleId, hotelRules]);
+
+  const selectedRuleUnmet = useMemo(() => {
+    if (!selectedRule) return null;
+    return ruleUnmetReason(selectedRule, { paymentNights: selectedNights, paymentMethod: method }, pmLabels);
+  }, [selectedRule, selectedNights, method, pmLabels]);
+
+  const appliedRule = selectedRule && !selectedRuleUnmet ? selectedRule : null;
 
   const paymentNightly = useRules
     ? isSplit
       ? roomPrice
-      : paymentNightlyWithRule(roomPrice, selectedNights, matchedRule)
+      : paymentNightlyWithRule(roomPrice, selectedNights, appliedRule)
     : discountChanged
       ? quoteNightly
       : contractNightly;
@@ -187,7 +202,7 @@ export function BookingPaymentForm({
       : useRules
         ? isSplit
           ? selectedNights * roomPrice
-          : calcPaymentWithRule(roomPrice, selectedNights, matchedRule)
+          : calcPaymentWithRule(roomPrice, selectedNights, appliedRule)
         : selectedNights * paymentNightly;
   const totalToPay = paymentAmount + extrasSum;
 
@@ -199,11 +214,6 @@ export function BookingPaymentForm({
   function toggleExtra(code: StayExtraCode) {
     setExtrasSel((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
   }
-  const pmEntries = Object.entries(pmConfig);
-  const pmLabels = useMemo(
-    () => Object.fromEntries(pmEntries.map(([k, v]) => [k, v.label])),
-    [pmEntries]
-  );
 
   useEffect(() => {
     setPaidThrough(mskAddDays(firstUnpaidKey, Math.max(1, selectedNights)));
@@ -213,6 +223,10 @@ export function BookingPaymentForm({
     setError("");
     if (totalToPay <= 0) {
       setError("Сумма оплаты должна быть больше нуля");
+      return;
+    }
+    if (selectedRuleUnmet) {
+      setError(`Условия скидки не выполнены: ${selectedRuleUnmet}`);
       return;
     }
     if (isSplit) {
@@ -239,7 +253,7 @@ export function BookingPaymentForm({
       channelId: !isSplit && method === OTA_PAYMENT_CODE ? channelId : undefined,
       discountPercent: useRules ? 0 : pct,
       discountPerNight: useRules ? 0 : perNight,
-      discountRuleId: isSplit ? undefined : matchedRule?.id,
+      discountRuleId: isSplit || !appliedRule ? undefined : appliedRule.id,
       operationDate: canManageSettings ? operationDate : undefined,
     });
     if (!ok) setError("Не удалось принять платёж");
@@ -285,29 +299,95 @@ export function BookingPaymentForm({
       </div>
 
       {useRules ? (
-        <div
-          className="rounded-xl p-4 border-2 flex items-start gap-3"
-          style={{
-            borderColor: matchedRule ? "#10B981" : "hsl(var(--border))",
-            background: matchedRule ? "hsl(var(--success) / 0.1)" : undefined,
-          }}
-        >
-          <Tag size={16} className={matchedRule ? "text-success mt-0.5" : "text-muted-foreground mt-0.5"} />
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-bold text-muted-foreground uppercase mb-1">Скидка по правилам отеля</div>
-            {matchedRule ? (
-              <>
-                <div className="text-[13px] font-bold text-success">{formatRuleLabel(matchedRule, pmLabels)}</div>
-                <div className="text-[11px] text-muted-foreground mt-1">
-                  Экономия {money(selectedNights * roomPrice - paymentAmount)} за {selectedNights} ноч.
-                </div>
-              </>
-            ) : (
-              <div className="text-[12px] text-muted-foreground">
-                При {selectedNights} ноч. и выбранном способе оплаты скидка не применяется
-              </div>
-            )}
+        <div className="rounded-xl p-4 border border-border bg-muted/40 space-y-3">
+          <div className="flex items-start gap-3">
+            <Tag size={16} className={appliedRule ? "text-success mt-0.5" : "text-muted-foreground mt-0.5"} />
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-bold text-muted-foreground uppercase mb-1">Скидка по правилам отеля</div>
+              <p className="text-[11px] text-muted-foreground">
+                {isSplit
+                  ? "При смежной оплате скидка недоступна — полный тариф."
+                  : "По умолчанию без скидки. Выберите правило, если условия выполнены."}
+              </p>
+            </div>
           </div>
+          {!isSplit && (
+            <div className="space-y-2">
+              <label
+                className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${
+                  !selectedRuleId ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="discount-rule"
+                  checked={!selectedRuleId}
+                  onChange={() => setSelectedRuleId("")}
+                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-foreground">Без скидки</span>
+                  <span className="block text-[11px] text-muted-foreground">Полный тариф · {money(selectedNights * roomPrice)}</span>
+                </span>
+              </label>
+              {hotelRules.map((rule) => {
+                const unmet = ruleUnmetReason(
+                  rule,
+                  { paymentNights: selectedNights, paymentMethod: method },
+                  pmLabels
+                );
+                const checked = selectedRuleId === rule.id;
+                const withDiscount = calcPaymentWithRule(roomPrice, Math.max(1, selectedNights), rule);
+                return (
+                  <label
+                    key={rule.id}
+                    className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${
+                      checked && !unmet
+                        ? "border-emerald-500 bg-emerald-500/10"
+                        : checked && unmet
+                          ? "border-destructive/50 bg-destructive/5"
+                          : unmet
+                            ? "border-border opacity-70"
+                            : "border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="discount-rule"
+                      checked={checked}
+                      onChange={() => setSelectedRuleId(rule.id)}
+                      className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-semibold text-foreground">
+                        {formatRuleLabel(rule, pmLabels)}
+                      </span>
+                      {unmet ? (
+                        <span className="block text-[11px] text-destructive mt-0.5">Недоступно: {unmet}</span>
+                      ) : (
+                        <span className="block text-[11px] text-muted-foreground mt-0.5">
+                          К оплате {money(withDiscount)}
+                          {selectedNights > 0
+                            ? ` · экономия ${money(selectedNights * roomPrice - withDiscount)}`
+                            : ""}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+              {selectedRuleUnmet && (
+                <p className="text-[12px] text-destructive font-semibold">
+                  Выбранная скидка сейчас не подходит: {selectedRuleUnmet}. Будет полный тариф, пока не смените условия или скидку.
+                </p>
+              )}
+              {appliedRule && selectedNights > 0 && (
+                <p className="text-[12px] font-semibold text-success">
+                  Скидка применена · экономия {money(selectedNights * roomPrice - paymentAmount)}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
@@ -494,6 +574,7 @@ export function BookingPaymentForm({
           disabled={
             busy ||
             totalToPay <= 0 ||
+            !!selectedRuleUnmet ||
             (!isSplit && method === OTA_PAYMENT_CODE && !channelId) ||
             (isSplit && sumSplitParts(paymentSel.parts) !== totalToPay)
           }

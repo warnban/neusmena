@@ -106,12 +106,13 @@ export function computeRefundQuote(input: RefundQuoteInput): RefundQuote {
 
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0) || booking.paid;
   const paymentMethod = dominantPaymentMethod(payments);
+  const discountWasApplied = payments.some((p) => p.discountRuleId);
 
   const { amount: obligationAmount, note: obligationNote } = obligationForConsumedNights({
     roomPrice,
     consumedNights,
     paymentMethod,
-    rules,
+    rules: discountWasApplied ? rules : [],
     hotelId: booking.hotelId,
   });
 

@@ -16,7 +16,7 @@ import { buildRefundQuoteFromContext, canRefundBooking, loadRefundContext } from
 import { mskDateKey, mskNightDiff, mskAddDays, parseMskDateKey } from "@/lib/msk-time";
 import { findAvailableRooms, resolveRoomForBooking } from "@/lib/booking-availability.server";
 import { formatDormPlaceLabel } from "@/lib/dorm";
-import { hotelHasDiscountRules, formatRuleLabel, matchDiscountRule, calcPaymentWithRule, calcNightPaymentTotal, activeRulesForHotel } from "@/lib/hotel-discount-rules";
+import { hotelHasDiscountRules, calcPaymentWithRule, calcNightPaymentTotal } from "@/lib/hotel-discount-rules";
 import { searchFaqChunks } from "@/lib/assistant/faq.server";
 import type { PendingAction } from "@/lib/assistant/types";
 import type { SessionPayload } from "@/lib/auth";
@@ -435,12 +435,8 @@ export async function runAssistantTool(
         nights = Math.max(1, mskNightDiff(firstUnpaid, paidThroughRaw));
       }
 
-      const hotelRules = activeRulesForHotel(discountRules, booking.hotelId);
-      const matched = useRules
-        ? matchDiscountRule(hotelRules, { paymentNights: nights, paymentMethod: "cash" })
-        : null;
       const amount = useRules
-        ? calcPaymentWithRule(booking.room.price, nights, matched)
+        ? calcPaymentWithRule(booking.room.price, nights, null)
         : calcNightPaymentTotal(
             booking.room.price,
             nights,
@@ -456,7 +452,7 @@ export async function runAssistantTool(
           firstUnpaidNight: firstUnpaid,
           paidThroughDate: paidThroughRaw || mskAddDays(firstUnpaid, nights),
           amount,
-          discountNote: matched ? formatRuleLabel(matched) : null,
+          discountNote: null,
         },
       };
     }
