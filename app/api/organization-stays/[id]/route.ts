@@ -5,7 +5,7 @@ import { assertHotelWrite } from "@/lib/permissions";
 import { apiErrorMessage } from "@/lib/api-error";
 import { parseStayDate, recalcOrganizationStayAmount } from "@/lib/organization-stay";
 import {
-  releaseOrganizationRoom,
+  releaseOrganizationPlace,
   syncOrganizationDormRooms,
 } from "@/lib/organization-stay-occupancy.server";
 
@@ -55,7 +55,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             where: { id: sr.id },
             data: { status: "checked_out", checkedOutAt: new Date() },
           });
-          const isDorm = await releaseOrganizationRoom(sr.roomId, tx);
+          const isDorm = await releaseOrganizationPlace(sr.roomId, sr.bedId, "available", tx);
           if (isDorm) dormRoomIds.push(sr.roomId);
         }
       });

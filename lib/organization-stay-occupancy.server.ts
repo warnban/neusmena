@@ -29,6 +29,31 @@ async function setOrganizationRoomStatus(
   return false;
 }
 
+export async function occupyOrganizationPlace(
+  roomId: string,
+  bedId: string | null | undefined,
+  db: Db = prisma
+): Promise<boolean> {
+  if (bedId) {
+    await db.bed.update({ where: { id: bedId }, data: { status: "occupied" } });
+    return true;
+  }
+  return occupyOrganizationRoom(roomId, db);
+}
+
+export async function releaseOrganizationPlace(
+  roomId: string,
+  bedId: string | null | undefined,
+  status: RoomStatus,
+  db: Db = prisma
+): Promise<boolean> {
+  if (bedId) {
+    await db.bed.update({ where: { id: bedId }, data: { status } });
+    return true;
+  }
+  return setOrganizationRoomStatus(roomId, status, db);
+}
+
 export async function occupyOrganizationRoom(roomId: string, db: Db = prisma): Promise<boolean> {
   return setOrganizationRoomStatus(roomId, "occupied", db);
 }

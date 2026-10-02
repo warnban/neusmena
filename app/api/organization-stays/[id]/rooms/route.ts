@@ -10,7 +10,7 @@ import {
   shouldOccupyRoom,
 } from "@/lib/organization-stay";
 import {
-  occupyOrganizationRoom,
+  occupyOrganizationPlace,
   syncOrganizationDormRooms,
 } from "@/lib/organization-stay-occupancy.server";
 
@@ -43,32 +43,43 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Период номера должен быть в рамках проживания. Продлите проживание при необходимости." }, { status: 400 });
     }
 
-    const avail = await assertRoomAvailable(roomId, checkIn, checkOut);
-    if (!avail.ok) return NextResponse.json({ error: avail.error }, { status: 400 });
+    const bedIds: (string | null)[] = Array.isArray(body.bedIds) && body.bedIds.length
+      ? body.bedIds.map((id: unknown) => String(id))
+      : body.bedId
+        ? [String(body.bedId)]
+        : [null];
+
+    for (const bedId of bedIds) {
+      const avail = await assertRoomAvailable(roomId, checkIn, checkOut, undefined, bedId);
+      if (!avail.ok) return NextResponse.json({ error: avail.error }, { status: 400 });
+    }
 
     const room = await prisma.room.findFirst({ where: { id: roomId, hotelId: stay.hotelId } });
     if (!room) return NextResponse.json({ error: "Номер не найден" }, { status: 404 });
 
     const dormRoomIds: string[] = [];
 
-    const stayRoom = await prisma.$transaction(async (tx) => {
-      const sr = await tx.organizationStayRoom.create({
-        data: {
-          organizationStayId: stay.id,
-          roomId: room.id,
-          roomNumber: room.number,
-          checkIn,
-          checkOut,
-          status: "active",
-        },
-      });
-
-      if (shouldOccupyRoom(checkIn)) {
-        const isDorm = await occupyOrganizationRoom(room.id, tx);
-        if (isDorm) dormRoomIds.push(room.id);
+    const stayRooms = await prisma.$transaction(async (tx) => {
+      const created = [];
+      for (const bedId of bedIds) {
+        const sr = await tx.organizationStayRoom.create({
+          data: {
+            organizationStayId: stay.id,
+            roomId: room.id,
+            bedId,
+            roomNumber: room.number,
+            checkIn,
+            checkOut,
+            status: "active",
+          },
+        });
+        created.push(sr);
+        if (shouldOccupyRoom(checkIn)) {
+          const isDorm = await occupyOrganizationPlace(room.id, bedId, tx);
+          if (isDorm) dormRoomIds.push(room.id);
+        }
       }
-
-      return sr;
+      return created;
     });
 
     if (dormRoomIds.length) {
@@ -77,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     await recalcOrganizationStayAmount(stay.id);
 
-    return NextResponse.json({ ok: true, room: stayRoom });
+    return NextResponse.json({ ok: true, rooms: stayRooms });
   } catch (e) {
     console.error("[organization-stays rooms POST]", e);
     return NextResponse.json({ error: apiErrorMessage(e, "Не удалось добавить номер") }, { status: 500 });

@@ -11,10 +11,11 @@ import {
   shouldOccupyRoom,
 } from "@/lib/organization-stay";
 import {
-  occupyOrganizationRoom,
-  releaseOrganizationRoomToCleaning,
+  occupyOrganizationPlace,
+  releaseOrganizationPlace,
   syncOrganizationDormRooms,
 } from "@/lib/organization-stay-occupancy.server";
+import { formatHkPlaceLabel } from "@/lib/housekeeping";
 
 async function loadStayRoom(stayId: string, roomStayId: string, seatId: string) {
   return prisma.organizationStayRoom.findFirst({
@@ -60,7 +61,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Период номера должен быть в рамках проживания" }, { status: 400 });
     }
 
-    const avail = await assertRoomAvailable(sr.roomId, checkIn, checkOut, sr.id);
+    const avail = await assertRoomAvailable(sr.roomId, checkIn, checkOut, sr.id, sr.bedId);
     if (!avail.ok) return NextResponse.json({ error: avail.error }, { status: 400 });
 
     const dormRoomIds: string[] = [];
@@ -72,7 +73,7 @@ export async function PATCH(
       });
 
       if (shouldOccupyRoom(checkIn)) {
-        const isDorm = await occupyOrganizationRoom(sr.roomId, tx);
+        const isDorm = await occupyOrganizationPlace(sr.roomId, sr.bedId, tx);
         if (isDorm) dormRoomIds.push(sr.roomId);
       }
 
@@ -128,15 +129,17 @@ export async function POST(
           checkOut: checkoutDate,
         },
       });
-      const isDorm = await releaseOrganizationRoomToCleaning(sr.roomId, tx);
+      const isDorm = await releaseOrganizationPlace(sr.roomId, sr.bedId, "cleaning", tx);
       if (isDorm) dormRoomIds.push(sr.roomId);
+      const bed = sr.bedId ? await tx.bed.findUnique({ where: { id: sr.bedId }, select: { label: true } }) : null;
       await tx.hkTask.create({
         data: {
           hotelId: sr.organizationStay.hotelId,
           roomId: sr.roomId,
+          bedId: sr.bedId,
           organizationStayId: sr.organizationStayId,
           organizationStayRoomId: sr.id,
-          roomNumber: sr.roomNumber,
+          roomNumber: formatHkPlaceLabel(sr.room.number, bed?.label),
           type: HK_CATEGORY_TYPES.checkout,
           category: "checkout",
           assignee: "—",

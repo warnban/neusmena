@@ -10,11 +10,11 @@ import {
   shouldOccupyRoom,
 } from "@/lib/organization-stay";
 import {
-  occupyOrganizationRoom,
+  occupyOrganizationPlace,
   syncOrganizationDormRooms,
 } from "@/lib/organization-stay-occupancy.server";
 
-type RoomInput = { roomId: string; checkIn?: string; checkOut?: string };
+type RoomInput = { roomId: string; bedId?: string | null; checkIn?: string; checkOut?: string };
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     }
 
     const roomInputs: RoomInput[] = Array.isArray(body.rooms) ? body.rooms : [];
+    const wholeRooms = new Set(roomInputs.filter((r) => !r.bedId).map((r) => String(r.roomId)));
+    const seenBeds = new Set<string>();
 
     for (const ri of roomInputs) {
       const riIn = ri.checkIn ? parseStayDate(ri.checkIn) : checkIn;
@@ -48,7 +50,17 @@ export async function POST(req: NextRequest) {
       if (riIn < checkIn || riOut > checkOut) {
         return NextResponse.json({ error: "Период номера должен быть в рамках проживания" }, { status: 400 });
       }
-      const avail = await assertRoomAvailable(ri.roomId, riIn, riOut);
+      const bedId = ri.bedId ? String(ri.bedId) : null;
+      if (bedId && wholeRooms.has(String(ri.roomId))) {
+        return NextResponse.json({ error: "Нельзя занять комнату целиком и отдельные койки в ней одновременно" }, { status: 400 });
+      }
+      if (bedId) {
+        if (seenBeds.has(bedId)) {
+          return NextResponse.json({ error: "Койко-место указано дважды" }, { status: 400 });
+        }
+        seenBeds.add(bedId);
+      }
+      const avail = await assertRoomAvailable(String(ri.roomId), riIn, riOut, undefined, bedId);
       if (!avail.ok) return NextResponse.json({ error: avail.error }, { status: 400 });
     }
 
@@ -75,10 +87,17 @@ export async function POST(req: NextRequest) {
         const riIn = ri.checkIn ? parseStayDate(ri.checkIn) : checkIn;
         const riOut = ri.checkOut ? parseStayDate(ri.checkOut) : checkOut;
 
+        const bedId = ri.bedId ? String(ri.bedId) : null;
+        if (bedId) {
+          const bed = await tx.bed.findFirst({ where: { id: bedId, roomId: room.id } });
+          if (!bed) throw new Error("Койко-место не найдено");
+        }
+
         await tx.organizationStayRoom.create({
           data: {
             organizationStayId: created.id,
             roomId: room.id,
+            bedId,
             roomNumber: room.number,
             checkIn: riIn,
             checkOut: riOut,
@@ -87,7 +106,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (shouldOccupyRoom(riIn)) {
-          const isDorm = await occupyOrganizationRoom(room.id, tx);
+          const isDorm = await occupyOrganizationPlace(room.id, bedId, tx);
           if (isDorm) dormRoomIds.push(room.id);
         }
       }

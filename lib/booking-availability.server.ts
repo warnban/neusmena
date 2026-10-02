@@ -70,6 +70,7 @@ export async function hasBookingDateOverlap(params: {
             checkIn: { lt: checkOutDate },
             checkOut: { gt: checkInDate },
             organizationStay: { status: "active", hotelId: params.hotelId },
+            ...(params.bedId ? { OR: [{ bedId: null }, { bedId: params.bedId }] } : {}),
           },
           select: { id: true },
         })
@@ -133,7 +134,7 @@ export async function findAvailableRooms(params: {
         room: { hotelId: params.hotelId },
         organizationStay: { status: "active" },
       },
-      select: { roomId: true, checkIn: true, checkOut: true, room: { select: { kind: true } } },
+      select: { roomId: true, bedId: true, checkIn: true, checkOut: true, room: { select: { kind: true } } },
     }),
   ]);
 
@@ -156,11 +157,9 @@ export async function findAvailableRooms(params: {
     const inKey = r.checkIn.toISOString().slice(0, 10);
     const outKey = r.checkOut.toISOString().slice(0, 10);
     if (dateRangesOverlap(checkIn, checkOut, inKey, outKey)) {
-      if (r.room.kind === "dorm") {
-        blockedDormRooms.add(r.roomId);
-      } else {
-        blockedPrivateRooms.add(r.roomId);
-      }
+      if (r.bedId) blockedBeds.add(r.bedId);
+      else if (r.room.kind === "dorm") blockedDormRooms.add(r.roomId);
+      else blockedPrivateRooms.add(r.roomId);
     }
   }
 

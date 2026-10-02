@@ -451,6 +451,7 @@ model Bed {
   label     String
   status    RoomStatus @default(available)
   bookings  Booking[]
+  organizationStayRooms OrganizationStayRoom[]
   hkTasks   HkTask[]
   createdAt DateTime   @default(now())
 
@@ -577,6 +578,8 @@ model OrganizationStayRoom {
   organizationStayId String
   room               Room                       @relation(fields: [roomId], references: [id])
   roomId             String
+  bed                Bed?                       @relation(fields: [bedId], references: [id], onDelete: SetNull)
+  bedId              String?
   roomNumber         String
   checkIn            DateTime
   checkOut           DateTime
@@ -587,6 +590,7 @@ model OrganizationStayRoom {
 
   @@index([organizationStayId])
   @@index([roomId])
+  @@index([bedId])
   @@index([status])
 }
 

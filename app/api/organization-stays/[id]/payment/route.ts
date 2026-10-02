@@ -7,6 +7,7 @@ import {
   assertPaymentOperationAllowed,
   resolveTransactionDateInput,
 } from "@/lib/transaction-date.server";
+import { parseStayDate } from "@/lib/organization-stay";
 import { apiErrorMessage } from "@/lib/api-error";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -43,10 +44,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!amount || amount <= 0) {
       return NextResponse.json({ error: "Некорректная сумма" }, { status: 400 });
     }
+    if (!body.periodFrom || !body.periodTo) {
+      return NextResponse.json({ error: "Укажите период оплаты" }, { status: 400 });
+    }
+    const periodFrom = parseStayDate(body.periodFrom);
+    const periodTo = parseStayDate(body.periodTo);
+    if (periodTo <= periodFrom) {
+      return NextResponse.json({ error: "Конец периода должен быть позже начала" }, { status: 400 });
+    }
 
     const paymentMethod = String(body.paymentMethod ?? "cash");
     const org = stay.organization;
-    const paidBefore = stay.paid;
 
     const [, updatedStay] = await prisma.$transaction([
       prisma.transaction.create({
@@ -62,18 +70,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           guestName: org.name,
           note: buildOrganizationPaymentNote(
             org.name,
-            stay.checkIn,
-            stay.checkOut,
+            periodFrom,
+            periodTo,
             amount,
-            paidBefore,
-            stay.amount,
+            stay.paid,
+            0,
             body.note ?? null
           ),
         },
       }),
       prisma.organizationStay.update({
         where: { id: stay.id },
-        data: { paid: Math.min(stay.amount, stay.paid + amount) },
+        data: { paid: { increment: amount } },
       }),
       prisma.organization.update({
         where: { id: org.id },

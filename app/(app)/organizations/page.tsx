@@ -16,6 +16,7 @@ import { Select } from "@/components/ui/select";
 import { OperationDateField } from "@/components/ui/operation-date-field";
 import { filterOrganizationTransactions } from "@/lib/organization-payments";
 import { money, fmtDate, dayDiff } from "@/lib/format";
+import { guestStayPlace } from "@/lib/dorm";
 import { mskDateKey } from "@/lib/msk-time";
 import type { Organization } from "@/lib/types";
 
@@ -30,7 +31,7 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
 
 export default function OrganizationsPage() {
   const {
-    organizations, organizationStays, rooms, hotels, transactions, hotelId,
+    organizations, organizationStays, rooms, beds, hotels, transactions, hotelId,
     pmConfig, loading, refresh, getCategoryLabel, canManageSettings,
   } = useApp();
 
@@ -45,11 +46,15 @@ export default function OrganizationsPage() {
   const [stayHotelId, setStayHotelId] = useState("");
   const [stayCheckIn, setStayCheckIn] = useState("");
   const [stayCheckOut, setStayCheckOut] = useState("");
-  const [stayRoomIds, setStayRoomIds] = useState<string[]>([]);
+  const [places, setPlaces] = useState<{ roomId: string; bedId: string | null }[]>([]);
   const [addRoomId, setAddRoomId] = useState("");
+  const [addWhole, setAddWhole] = useState(true);
+  const [addBedIds, setAddBedIds] = useState<string[]>([]);
   const [addRoomCheckIn, setAddRoomCheckIn] = useState("");
   const [addRoomCheckOut, setAddRoomCheckOut] = useState("");
   const [payAmount, setPayAmount] = useState("");
+  const [payFrom, setPayFrom] = useState("");
+  const [payTo, setPayTo] = useState("");
   const [payMethod, setPayMethod] = useState("cash");
   const [payNote, setPayNote] = useState("");
   const [payOperationDate, setPayOperationDate] = useState(() => mskDateKey());
@@ -106,8 +111,14 @@ export default function OrganizationsPage() {
     out.setDate(out.getDate() + 7);
     setStayCheckIn(today.toISOString().slice(0, 10));
     setStayCheckOut(out.toISOString().slice(0, 10));
-    setStayRoomIds([]);
+    setPlaces([]);
   }, [stayFormOpen, hotelId, hotels]);
+
+  useEffect(() => {
+    if (!activeStay) return;
+    setPayFrom(mskDateKey(activeStay.checkIn));
+    setPayTo(mskDateKey(activeStay.checkOut));
+  }, [activeStay?.id]);
 
   const hotelRooms = useMemo(
     () => rooms.filter((r) => r.hotelId === (activeStay?.hotelId ?? stayHotelId)),
@@ -135,6 +146,22 @@ export default function OrganizationsPage() {
     await refresh();
   }
 
+  function toggleWholeRoom(roomId: string) {
+    setPlaces((prev) => {
+      const on = prev.some((p) => p.roomId === roomId && !p.bedId);
+      const rest = prev.filter((p) => p.roomId !== roomId);
+      return on ? rest : [...rest, { roomId, bedId: null }];
+    });
+  }
+
+  function toggleBed(roomId: string, bedId: string) {
+    setPlaces((prev) => {
+      const withoutWhole = prev.filter((p) => !(p.roomId === roomId && !p.bedId));
+      const on = withoutWhole.some((p) => p.bedId === bedId);
+      return on ? withoutWhole.filter((p) => p.bedId !== bedId) : [...withoutWhole, { roomId, bedId }];
+    });
+  }
+
   async function createStay() {
     if (!selected || !stayHotelId || !stayCheckIn || !stayCheckOut) return;
     setBusy(true);
@@ -146,7 +173,7 @@ export default function OrganizationsPage() {
         hotelId: stayHotelId,
         checkIn: stayCheckIn,
         checkOut: stayCheckOut,
-        rooms: stayRoomIds.map((roomId) => ({ roomId })),
+        rooms: places.map((p) => ({ roomId: p.roomId, bedId: p.bedId })),
       }),
     });
     setBusy(false);
@@ -161,12 +188,18 @@ export default function OrganizationsPage() {
 
   async function addRoomToStay() {
     if (!activeStay || !addRoomId) return;
+    const room = rooms.find((r) => r.id === addRoomId);
+    if (room?.kind === "dorm" && !addWhole && addBedIds.length === 0) {
+      alert("Выберите койки или комнату целиком");
+      return;
+    }
     setBusy(true);
     const res = await fetch(`/api/organization-stays/${activeStay.id}/rooms`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         roomId: addRoomId,
+        bedIds: room?.kind === "dorm" && !addWhole ? addBedIds : undefined,
         checkIn: addRoomCheckIn || activeStay.checkIn.toISOString().slice(0, 10),
         checkOut: addRoomCheckOut || activeStay.checkOut.toISOString().slice(0, 10),
       }),
@@ -218,13 +251,15 @@ export default function OrganizationsPage() {
   async function submitPayment() {
     if (!activeStay) return;
     const amount = Math.round(Number(payAmount));
-    if (!amount) return;
+    if (!amount || !payFrom || !payTo) return;
     setBusy(true);
     const res = await fetch(`/api/organization-stays/${activeStay.id}/payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         amount,
+        periodFrom: payFrom,
+        periodTo: payTo,
         paymentMethod: payMethod,
         note: payNote,
         operationDate: canManageSettings ? payOperationDate : undefined,
@@ -378,19 +413,38 @@ export default function OrganizationsPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Номера (можно выбрать несколько)</label>
-                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase mb-1 block">Места: номер целиком или койки</label>
+                      <div className="space-y-2 max-h-56 overflow-y-auto">
                         {rooms.filter((r) => r.hotelId === stayHotelId).map((r) => {
-                          const on = stayRoomIds.includes(r.id);
+                          const roomBeds = beds.filter((b) => b.roomId === r.id);
+                          const whole = places.some((p) => p.roomId === r.id && !p.bedId);
                           return (
-                            <button
-                              key={r.id}
-                              type="button"
-                              onClick={() => setStayRoomIds((ids) => on ? ids.filter((x) => x !== r.id) : [...ids, r.id])}
-                              className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border ${on ? "bg-primary text-white border-primary" : "border-border bg-card"}`}
-                            >
-                              №{r.number}
-                            </button>
+                            <div key={r.id} className="rounded-lg border border-border p-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleWholeRoom(r.id)}
+                                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border ${whole ? "bg-primary text-white border-primary" : "border-border bg-card"}`}
+                              >
+                                {r.kind === "dorm" ? `${r.number} целиком` : `№${r.number}`}
+                              </button>
+                              {r.kind === "dorm" && roomBeds.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {roomBeds.map((bed) => {
+                                    const on = places.some((p) => p.bedId === bed.id);
+                                    return (
+                                      <button
+                                        key={bed.id}
+                                        type="button"
+                                        onClick={() => toggleBed(r.id, bed.id)}
+                                        className={`px-2 py-1 text-[11px] font-semibold rounded-lg border ${on ? "bg-primary text-white border-primary" : "border-border bg-card"}`}
+                                      >
+                                        {guestStayPlace(r.number, bed.label)}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>
@@ -410,12 +464,7 @@ export default function OrganizationsPage() {
                       <span className="font-semibold text-foreground">
                         {hotels.find((h) => h.id === activeStay.hotelId)?.name} · {fmtDate(activeStay.checkIn, true)} — {fmtDate(activeStay.checkOut, true)}
                       </span>
-                      <span className="font-black text-foreground">
-                        {money(activeStay.paid)} / {money(activeStay.amount)}
-                        {activeStay.amount - activeStay.paid > 0 && (
-                          <span className="text-destructive ml-1">(−{money(activeStay.amount - activeStay.paid)})</span>
-                        )}
-                      </span>
+                      <span className="font-black text-foreground">Оплачено {money(activeStay.paid)}</span>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="min-w-[140px]">
@@ -433,7 +482,10 @@ export default function OrganizationsPage() {
                         return (
                           <div key={sr.id} className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-border bg-muted/30">
                             <div>
-                              <div className="text-[13px] font-bold">№{sr.roomNumber} · {room ? getCategoryLabel(room.category) : ""}</div>
+                              <div className="text-[13px] font-bold">
+                                {guestStayPlace(sr.roomNumber, sr.bedId ? beds.find((b) => b.id === sr.bedId)?.label : null)}
+                                {room ? ` · ${getCategoryLabel(room.category)}` : ""}
+                              </div>
                               <div className="text-[11px] text-muted-foreground">
                                 {fmtDate(sr.checkIn, true)} — {fmtDate(sr.checkOut, true)} · {dayDiff(sr.checkIn, sr.checkOut)} н.
                                 {sr.status === "checked_out" && " · выселен"}
@@ -454,25 +506,72 @@ export default function OrganizationsPage() {
                     </div>
 
                     <div className="p-3 rounded-xl border border-dashed border-border space-y-2">
-                      <p className="text-[11px] font-bold text-muted-foreground uppercase">Добавить номер в проживание</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <Select
-                          size="sm"
-                          value={addRoomId}
-                          onChange={setAddRoomId}
-                          placeholder="Номер…"
-                          options={hotelRooms.map((r) => ({ value: r.id, label: `№${r.number}` }))}
-                        />
+                      <p className="text-[11px] font-bold text-muted-foreground uppercase">Добавить место</p>
+                      <Select
+                        size="sm"
+                        value={addRoomId}
+                        onChange={(id) => {
+                          setAddRoomId(id);
+                          setAddWhole(true);
+                          setAddBedIds([]);
+                        }}
+                        placeholder="Комната…"
+                        options={hotelRooms.map((r) => ({
+                          value: r.id,
+                          label: r.kind === "dorm" ? `${r.number} · общая` : `№${r.number}`,
+                        }))}
+                      />
+                      {hotelRooms.find((r) => r.id === addRoomId)?.kind === "dorm" && (
+                        <div className="space-y-1.5">
+                          <button
+                            type="button"
+                            onClick={() => { setAddWhole(true); setAddBedIds([]); }}
+                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border ${addWhole ? "bg-primary text-white border-primary" : "border-border"}`}
+                          >
+                            Комната целиком
+                          </button>
+                          <div className="flex flex-wrap gap-1">
+                            {beds.filter((b) => b.roomId === addRoomId).map((bed) => {
+                              const on = !addWhole && addBedIds.includes(bed.id);
+                              const roomNumber = hotelRooms.find((r) => r.id === addRoomId)?.number ?? "";
+                              return (
+                                <button
+                                  key={bed.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setAddWhole(false);
+                                    setAddBedIds((ids) => ids.includes(bed.id) ? ids.filter((x) => x !== bed.id) : [...ids, bed.id]);
+                                  }}
+                                  className={`px-2 py-1 text-[11px] font-semibold rounded-lg border ${on ? "bg-primary text-white border-primary" : "border-border"}`}
+                                >
+                                  {guestStayPlace(roomNumber, bed.label)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
                         <DatePicker value={addRoomCheckIn} onChange={setAddRoomCheckIn} placeholder="Заезд" />
                         <DatePicker value={addRoomCheckOut} onChange={setAddRoomCheckOut} placeholder="Выезд" />
                       </div>
                       <button onClick={addRoomToStay} disabled={busy || !addRoomId} className="text-[12px] font-bold text-primary hover:underline disabled:opacity-50">
-                        + Добавить номер
+                        + Добавить место
                       </button>
                     </div>
 
                     <div className="p-3 rounded-xl border border-border bg-muted/20 space-y-2">
-                      <p className="text-[11px] font-bold text-muted-foreground uppercase">Принять оплату</p>
+                      <p className="text-[11px] font-bold text-muted-foreground uppercase">Принять оплату за период</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase">С</label>
+                          <DatePicker value={payFrom} onChange={setPayFrom} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase">По</label>
+                          <DatePicker value={payTo} onChange={setPayTo} />
+                        </div>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         <input value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="Сумма" className="w-28 px-3 py-2 text-[12px] rounded-xl border border-border bg-card" />
                         <Select
@@ -483,7 +582,7 @@ export default function OrganizationsPage() {
                           className="min-w-[140px]"
                         />
                         <input value={payNote} onChange={(e) => setPayNote(e.target.value)} placeholder="Комментарий" className="flex-1 min-w-[120px] px-3 py-2 text-[12px] rounded-xl border border-border bg-card" />
-                        <button onClick={submitPayment} disabled={busy} className="px-4 py-2 text-[12px] font-bold rounded-xl text-white bg-success hover:opacity-90 disabled:opacity-50">
+                        <button onClick={submitPayment} disabled={busy || !payFrom || !payTo} className="px-4 py-2 text-[12px] font-bold rounded-xl text-white bg-success hover:opacity-90 disabled:opacity-50">
                           Оплатить
                         </button>
                       </div>

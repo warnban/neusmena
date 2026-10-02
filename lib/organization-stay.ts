@@ -54,51 +54,49 @@ export function calcStayRoomsAmount(
   }, 0);
 }
 
+/** Стоимость проживания организации не считается по тарифу номеров — сумму вносят при оплате. */
 export async function recalcOrganizationStayAmount(stayId: string): Promise<number> {
   const stay = await prisma.organizationStay.findUnique({
     where: { id: stayId },
-    include: { rooms: { include: { room: { include: { beds: true } } } } },
+    select: { amount: true },
   });
-  if (!stay) return 0;
-
-  const amount = calcStayRoomsAmount(
-    stay.rooms.map((sr) => ({
-      price: sr.room.price,
-      kind: sr.room.kind,
-      bedCount: sr.room.beds.length,
-      checkIn: sr.checkIn,
-      checkOut: sr.checkOut,
-      status: sr.status,
-      checkedOutAt: sr.checkedOutAt,
-    }))
-  );
-
-  await prisma.organizationStay.update({
-    where: { id: stayId },
-    data: { amount },
-  });
-
-  return amount;
+  return stay?.amount ?? 0;
 }
 
 export async function assertRoomAvailable(
   roomId: string,
   checkIn: Date,
   checkOut: Date,
-  excludeStayRoomId?: string
+  excludeStayRoomId?: string,
+  bedId?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const room = await prisma.room.findUnique({
+    where: { id: roomId },
+    select: { id: true, number: true, kind: true },
+  });
+  if (!room) return { ok: false, error: "Номер не найден" };
+
+  if (bedId) {
+    if (room.kind !== "dorm") {
+      return { ok: false, error: "Койко-место можно выбрать только в общей комнате" };
+    }
+    const bed = await prisma.bed.findFirst({ where: { id: bedId, roomId }, select: { id: true, label: true } });
+    if (!bed) return { ok: false, error: "Койко-место не найдено в этой комнате" };
+  }
+
   const bookings = await prisma.booking.findMany({
     where: {
       roomId,
       status: { in: ["new", "confirmed", "checkedin"] },
+      ...(bedId ? { OR: [{ bedId }, { bedId: null }] } : {}),
     },
-    select: { checkIn: true, checkOut: true, guestName: true },
+    select: { checkIn: true, checkOut: true, guestName: true, bedId: true },
   });
 
   for (const b of bookings) {
-    if (datesOverlap(checkIn, checkOut, b.checkIn, b.checkOut)) {
-      return { ok: false, error: `Номер занят бронированием: ${b.guestName}` };
-    }
+    if (!datesOverlap(checkIn, checkOut, b.checkIn, b.checkOut)) continue;
+    if (bedId && b.bedId && b.bedId !== bedId) continue;
+    return { ok: false, error: `Место занято бронированием: ${b.guestName}` };
   }
 
   const orgRooms = await prisma.organizationStayRoom.findMany({
@@ -106,8 +104,10 @@ export async function assertRoomAvailable(
       roomId,
       status: "active",
       ...(excludeStayRoomId ? { id: { not: excludeStayRoomId } } : {}),
+      ...(bedId ? { OR: [{ bedId: null }, { bedId }] } : {}),
     },
     select: {
+      bedId: true,
       checkIn: true,
       checkOut: true,
       organizationStay: { select: { organization: { select: { name: true } } } },
@@ -115,9 +115,10 @@ export async function assertRoomAvailable(
   });
 
   for (const sr of orgRooms) {
-    if (datesOverlap(checkIn, checkOut, sr.checkIn, sr.checkOut)) {
-      return { ok: false, error: `Номер занят организацией: ${sr.organizationStay.organization.name}` };
-    }
+    if (!datesOverlap(checkIn, checkOut, sr.checkIn, sr.checkOut)) continue;
+    const who = sr.organizationStay.organization.name;
+    if (!bedId) return { ok: false, error: `Номер занят организацией: ${who}` };
+    if (!sr.bedId || sr.bedId === bedId) return { ok: false, error: `Койко-место занято организацией: ${who}` };
   }
 
   return { ok: true };
