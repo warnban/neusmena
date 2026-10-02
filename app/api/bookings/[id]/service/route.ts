@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
+import { catalogItemCategory } from "@/lib/transaction-categories";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await assertBookingWrite(await getSession(), params.id);
@@ -25,8 +26,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const amount = service.price * qty;
   const method = body.paymentMethod ?? "cash";
+  const category = catalogItemCategory(service.name);
 
   await prisma.$transaction([
+    ...(auth.session.seatId
+      ? [
+          prisma.transactionCategoryDef.upsert({
+            where: { seatId_code: { seatId: auth.session.seatId, code: category } },
+            create: { seatId: auth.session.seatId, code: category, label: category },
+            update: { label: category },
+          }),
+        ]
+      : []),
     prisma.serviceSale.create({
       data: {
         hotelId: booking.hotelId,
@@ -44,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data: {
         hotelId: booking.hotelId,
         type: "service",
-        category: service.category,
+        category,
         paymentMethod: method,
         amount,
         bookingId: booking.id,

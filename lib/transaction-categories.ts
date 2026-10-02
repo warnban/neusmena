@@ -28,6 +28,11 @@ export function normalizeCategoryLabel(label: string): string {
   return label.trim().slice(0, 80);
 }
 
+/** Категория проводки продажи или расхода — само название позиции, не «Прочее». */
+export function catalogItemCategory(name: string): string {
+  return normalizeCategoryLabel(name) || "Прочее";
+}
+
 export type TransactionCategoryOption = {
   code: string;
   label: string;

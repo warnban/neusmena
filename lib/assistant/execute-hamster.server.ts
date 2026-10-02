@@ -14,6 +14,7 @@ import { performCheckIn, type PerformCheckInInput } from "@/lib/checkin.server";
 import { relocateBooking } from "@/lib/booking-relocate.server";
 import type { GuestFormData } from "@/lib/guest-form";
 import type { SessionPayload } from "@/lib/auth";
+import { catalogItemCategory } from "@/lib/transaction-categories";
 
 export async function executeCheckout(
   session: SessionPayload,
@@ -106,6 +107,7 @@ export async function executeSale(
   if (!service) return { ok: false, error: "Услуга не найдена" };
 
   const amount = service.price * qty;
+  const category = catalogItemCategory(service.name);
   let guestName: string | null = payload.guestName ? String(payload.guestName) : null;
   let roomNumber: string | null = null;
 
@@ -121,6 +123,15 @@ export async function executeSale(
   }
 
   await prisma.$transaction([
+    ...(session.seatId
+      ? [
+          prisma.transactionCategoryDef.upsert({
+            where: { seatId_code: { seatId: session.seatId, code: category } },
+            create: { seatId: session.seatId, code: category, label: category },
+            update: { label: category },
+          }),
+        ]
+      : []),
     prisma.serviceSale.create({
       data: {
         hotelId,
@@ -138,7 +149,7 @@ export async function executeSale(
       data: {
         hotelId,
         type: "service",
-        category: service.category,
+        category,
         paymentMethod,
         amount,
         bookingId,
@@ -228,8 +239,18 @@ export async function executeBookingService(
   const qty = Math.max(1, Math.round(Number(payload.qty) || 1));
   const amount = service.price * qty;
   const method = String(opts.paymentMethod ?? payload.paymentMethod ?? "cash");
+  const category = catalogItemCategory(service.name);
 
   await prisma.$transaction([
+    ...(session.seatId
+      ? [
+          prisma.transactionCategoryDef.upsert({
+            where: { seatId_code: { seatId: session.seatId, code: category } },
+            create: { seatId: session.seatId, code: category, label: category },
+            update: { label: category },
+          }),
+        ]
+      : []),
     prisma.serviceSale.create({
       data: {
         hotelId: auth.booking.hotelId,
@@ -247,7 +268,7 @@ export async function executeBookingService(
       data: {
         hotelId: auth.booking.hotelId,
         type: "service",
-        category: service.category,
+        category,
         paymentMethod: method,
         amount,
         bookingId: auth.booking.id,

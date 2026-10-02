@@ -5,6 +5,7 @@ import {
   assertPaymentOperationAllowed,
   resolveTransactionDateInput,
 } from "@/lib/transaction-date.server";
+import { catalogItemCategory } from "@/lib/transaction-categories";
 import {
   allocateSplitAcrossItems,
   isSplitPayment,
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
   const lineItems = items.map((item) => {
     const svc = svcMap[item.serviceId];
     const qty = Math.max(1, Math.round(Number(item.qty) || 1));
-    return { svc, qty, amount: svc.price * qty, category: svc.category, name: svc.name };
+    return { svc, qty, amount: svc.price * qty, category: catalogItemCategory(svc.name), name: svc.name };
   });
   const total = lineItems.reduce((sum, l) => sum + l.amount, 0);
 
@@ -89,6 +90,18 @@ export async function POST(req: NextRequest) {
   }
   const groupId = useSplit ? newPaymentGroupId() : null;
   const ops = [];
+  const seatId = auth.session.seatId;
+  if (seatId) {
+    for (const category of Array.from(new Set(lineItems.map((line) => line.category)))) {
+      ops.push(
+        prisma.transactionCategoryDef.upsert({
+          where: { seatId_code: { seatId, code: category } },
+          create: { seatId, code: category, label: category },
+          update: { label: category },
+        })
+      );
+    }
+  }
 
   if (kind === "service") {
     for (const line of lineItems) {
