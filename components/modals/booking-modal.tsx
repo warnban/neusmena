@@ -12,6 +12,7 @@ import { Icon } from "@/components/icon";
 import { money, fmtDate, inits } from "@/lib/format";
 import { BOOKING_ST } from "@/lib/constants";
 import { sourceStyle } from "@/lib/booking-sources";
+import { guestStayPlace } from "@/lib/dorm";
 import type { Booking, BookingStatus } from "@/lib/types";
 import { CheckInModal } from "@/components/modals/check-in-modal";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -238,7 +239,7 @@ export function BookingModal({
                     ["Заезд", `${fmtDate(live.checkIn)} · ${String(live.checkInHour).padStart(2, "0")}:00`],
                     ["Выезд", `${fmtDate(live.checkOut)} · ${String(live.checkOutHour).padStart(2, "0")}:00`],
                     ["Ночей", String(nights)],
-                    ["Номер", bed ? `койка ${bed.label} · комн. ${room?.number ?? ""}` : `№${room?.number} · ${room ? getCategoryLabel(room.category) : ""}`],
+                    ["Номер", `${guestStayPlace(room?.number, bed?.label)} · ${room ? getCategoryLabel(room.category) : ""}`],
                     ["Гостей", `${live.guests} чел.`],
                     ["Тариф", room ? `${money(room.price)}/н` : "—"],
                   ].map(([l, v], i) => (

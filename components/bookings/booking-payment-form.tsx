@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CreditCard, Tag } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PaymentMethodPicker, type PaymentSelection } from "@/components/payments/payment-method-picker";
@@ -26,6 +26,7 @@ import {
   calcPaymentWithRule,
   formatRuleLabel,
   hotelHasDiscountRules,
+  matchDiscountRule,
   paymentNightlyWithRule,
   ruleUnmetReason,
 } from "@/lib/hotel-discount-rules";
@@ -194,6 +195,10 @@ export function BookingPaymentForm({
   }, [selectedRule, selectedNights, method, pmLabels]);
 
   const appliedRule = selectedRule && !selectedRuleUnmet ? selectedRule : null;
+  const suggestedRule = useMemo(() => {
+    if (!useRules || isSplit || selectedNights <= 0) return null;
+    return matchDiscountRule(hotelRules, { paymentNights: selectedNights, paymentMethod: method });
+  }, [useRules, isSplit, selectedNights, hotelRules, method]);
 
   const paymentNightly = useRules
     ? isSplit
@@ -292,272 +297,47 @@ export function BookingPaymentForm({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        {[["Стоимость", money(totalAmount + extrasSum), "text-foreground"], ["Оплачено", money(effectivePaid), "text-success"], ["По договору", money(contractDebt), contractDebt > 0 ? "text-destructive" : "text-success"]].map(([l, v, c]) => (
-          <div key={String(l)} className="rounded-xl p-3 text-center bg-muted border border-border">
-            <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1">{l}</div>
-            <div className={`text-[18px] font-black ${c}`}>{v}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-xl p-4 bg-muted/60 border border-border space-y-2 text-[12px]">
-        <div className="flex justify-between gap-2">
-          <span className="text-muted-foreground">Тариф по договору</span>
-          <span className="font-semibold text-right">{money(contractNightly)}/сут.</span>
-        </div>
-        {STAY_EXTRA_CODES.filter((code) => hasStayExtra(booking, code)).map((code) => (
-          <div key={code} className="flex justify-between gap-2">
-            <span className="text-muted-foreground">{STAY_EXTRAS[code].label} ({STAY_EXTRAS[code].hours})</span>
-            <span className="font-semibold text-right">{money(booking[STAY_EXTRAS[code].field] ?? 0)}</span>
-          </div>
-        ))}
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 rounded-lg border border-border bg-muted/50 px-3 py-2 text-[12px]">
+        <span>Тариф <b>{money(contractNightly)}</b></span>
+        <span>Оплачено <b className="text-success">{money(effectivePaid)}</b></span>
         {prepaid > 0 && currentPaidThrough && (
-          <div className="flex justify-between gap-2">
-            <span className="text-muted-foreground">Сейчас оплачено до</span>
-            <span className="font-semibold">{fmtDate(parseMskDate(currentPaidThrough))} 12:00 · {prepaid} н.</span>
-          </div>
+          <span>до {fmtDate(parseMskDate(currentPaidThrough))} 12:00</span>
         )}
-        <div className="flex justify-between gap-2 pt-1 border-t border-border">
-          <span className="text-muted-foreground">Следующая оплата с</span>
-          <span className="font-bold text-foreground">{fmtDate(parseMskDate(firstUnpaidKey))}</span>
-        </div>
-        {effectivePaid > booking.paid && (
-          <p className="text-[10px] text-muted-foreground">
-            Включая платёж при заселении ({money(effectivePaid - booking.paid)} из транзакций)
-          </p>
-        )}
+        <span>с {fmtDate(parseMskDate(firstUnpaidKey))}</span>
+        <span className={contractDebt > 0 ? "text-destructive font-semibold" : "text-success font-semibold"}>
+          к оплате {money(contractDebt)}
+        </span>
       </div>
-
-      {useRules ? (
-        <div className="rounded-xl p-4 border border-border bg-muted/40 space-y-3">
-          <div className="flex items-start gap-3">
-            <Tag size={16} className={appliedRule ? "text-success mt-0.5" : "text-muted-foreground mt-0.5"} />
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-bold text-muted-foreground uppercase mb-1">Скидка по правилам отеля</div>
-              <p className="text-[11px] text-muted-foreground">
-                {isSplit
-                  ? "При смежной оплате скидка недоступна — полный тариф."
-                  : "По умолчанию без скидки. Выберите правило, если условия выполнены."}
-              </p>
-            </div>
-          </div>
-          {!isSplit && (
-            <div className="space-y-2">
-              <label
-                className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${
-                  !selectedRuleId ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="discount-rule"
-                  checked={!selectedRuleId}
-                  onChange={() => setSelectedRuleId("")}
-                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
-                />
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-semibold text-foreground">Без скидки</span>
-                  <span className="block text-[11px] text-muted-foreground">Полный тариф · {money(selectedNights * roomPrice)}</span>
-                </span>
-              </label>
-              {hotelRules.map((rule) => {
-                const unmet = ruleUnmetReason(
-                  rule,
-                  { paymentNights: selectedNights, paymentMethod: method },
-                  pmLabels
-                );
-                const checked = selectedRuleId === rule.id;
-                const withDiscount = calcPaymentWithRule(roomPrice, Math.max(1, selectedNights), rule);
-                return (
-                  <label
-                    key={rule.id}
-                    className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${
-                      checked && !unmet
-                        ? "border-emerald-500 bg-emerald-500/10"
-                        : checked && unmet
-                          ? "border-destructive/50 bg-destructive/5"
-                          : unmet
-                            ? "border-border opacity-70"
-                            : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="discount-rule"
-                      checked={checked}
-                      onChange={() => setSelectedRuleId(rule.id)}
-                      className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-semibold text-foreground">
-                        {formatRuleLabel(rule, pmLabels)}
-                      </span>
-                      {unmet ? (
-                        <span className="block text-[11px] text-destructive mt-0.5">Недоступно: {unmet}</span>
-                      ) : (
-                        <span className="block text-[11px] text-muted-foreground mt-0.5">
-                          К оплате {money(withDiscount)}
-                          {selectedNights > 0
-                            ? ` · экономия ${money(selectedNights * roomPrice - withDiscount)}`
-                            : ""}
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                );
-              })}
-              {selectedRuleUnmet && (
-                <p className="text-[12px] text-destructive font-semibold">
-                  Выбранная скидка сейчас не подходит: {selectedRuleUnmet}. Будет полный тариф, пока не смените условия или скидку.
-                </p>
-              )}
-              {appliedRule && selectedNights > 0 && (
-                <p className="text-[12px] font-semibold text-success">
-                  Скидка применена · экономия {money(selectedNights * roomPrice - paymentAmount)}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold text-muted-foreground block mb-1">Скидка, %</label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value)}
-              placeholder="0"
-              className="w-full px-3 py-2 text-[13px] rounded-xl border border-border bg-muted outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold text-muted-foreground block mb-1">Скидка, ₽/сут.</label>
-            <input
-              type="number"
-              min={0}
-              value={discountPerNight}
-              onChange={(e) => setDiscountPerNight(e.target.value)}
-              placeholder="0"
-              className="w-full px-3 py-2 text-[13px] rounded-xl border border-border bg-muted outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-        </div>
-      )}
 
       {STAY_EXTRA_CODES.some((code) => !hasStayExtra(booking, code)) && (
-        <fieldset>
-          <legend className="text-[12px] font-bold text-muted-foreground mb-2">Дополнительно к проживанию</legend>
-          <div className="space-y-2">
-            {STAY_EXTRA_CODES.filter((code) => !hasStayExtra(booking, code)).map((code) => {
-              const checked = extrasSel.includes(code);
-              return (
-                <label
-                  key={code}
-                  className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${
-                    checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleExtra(code)}
-                    className="h-4 w-4 accent-[hsl(var(--primary))]"
-                  />
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[13px] font-semibold text-foreground">{STAY_EXTRAS[code].label}</span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      {STAY_EXTRAS[code].hours} · 50% стоимости суток
-                    </span>
-                  </span>
-                  <span className="text-[13px] font-bold text-foreground">+{money(extraFee)}</span>
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
-      )}
-
-      {allNightsPaid ? (
-        <p className="rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-[12px] text-muted-foreground">
-          Все ночи до выезда уже оплачены{extrasSel.length ? " — будет оплачена только доплата." : "."}
-        </p>
-      ) : (
-      <div>
-        <label className="text-[12px] font-bold text-muted-foreground block mb-2">Период оплаты</label>
-        <div className="flex gap-2 mb-3">
-          {([
-            ["nights", "Кол-во ночей"],
-            ["date", "Оплачено до"],
-          ] as const).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setPeriodMode(id)}
-              className="flex-1 py-2 text-[12px] font-bold rounded-lg border transition-all"
-              style={{
-                borderColor: periodMode === id ? "#10B981" : "hsl(var(--border))",
-                background: periodMode === id ? "hsl(var(--success) / 0.1)" : undefined,
-                color: periodMode === id ? "#059669" : undefined,
-              }}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-1.5">
+          {STAY_EXTRA_CODES.filter((code) => !hasStayExtra(booking, code)).map((code) => {
+            const checked = extrasSel.includes(code);
+            return (
+              <button
+                key={code}
+                type="button"
+                onClick={() => toggleExtra(code)}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-full border ${
+                  checked ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                }`}
+              >
+                {checked ? "✓ " : "+ "}
+                {STAY_EXTRAS[code].label} {money(extraFee)}
+              </button>
+            );
+          })}
         </div>
-
-        {periodMode === "nights" ? (
-          <div>
-            <label className="text-[11px] font-bold text-muted-foreground block mb-1">Ночей</label>
-            <input
-              type="number"
-              min={nightsOptional ? 0 : 1}
-              max={maxPayNights}
-              value={nightsCount}
-              onChange={(e) => setNightsCount(e.target.value)}
-              className="w-full px-3 py-2.5 text-[15px] font-bold rounded-xl border border-border bg-muted outline-none focus:ring-2 focus:ring-ring"
-            />
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {selectedNights > 0
-                ? `До ${fmtDate(parseMskDate(selectedPaidThrough))} 12:00`
-                : "Без оплаты ночей — только доплата"}
-            </p>
-          </div>
-        ) : (
-          <div>
-            <label className="text-[11px] font-bold text-muted-foreground block mb-1">Оплачено до (до 12:00)</label>
-            <DatePicker
-              mode="iso"
-              value={paidThrough}
-              onChange={setPaidThrough}
-              min={mskAddDays(firstUnpaidKey, 1)}
-              max={maxPaidThroughKey}
-              className="w-full"
-            />
-            <p className="text-[10px] text-muted-foreground mt-1">{selectedNights} ноч. · {money(nightsAmount)}</p>
-          </div>
-        )}
-      </div>
       )}
 
-      <div className="rounded-xl p-3 border-2 border-primary/30 bg-primary/5 space-y-2">
-        <div className="flex items-end justify-between gap-3">
+      <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <label htmlFor="pay-amount" className="text-[11px] font-bold text-muted-foreground uppercase">Сумма за ночи</label>
             {selectedNights > 0 && (
-              <div className="text-[10px] text-muted-foreground">
-                {selectedNights} ноч. · тариф {money(openTariff)}/сут
-              </div>
+              <div className="text-[10px] text-muted-foreground">{selectedNights} ноч. · тариф {money(openTariff)}/сут</div>
             )}
-            {extrasSel.map((code) => (
-              <div key={code} className="text-[10px] text-muted-foreground">
-                + {STAY_EXTRAS[code].label.toLowerCase()} {money(extraFee)}
-              </div>
-            ))}
           </div>
           <input
             id="pay-amount"
@@ -571,13 +351,13 @@ export function BookingPaymentForm({
               manualNightly.current = selectedNights > 0 ? Math.round(next / selectedNights) : null;
               setAmountManual(true);
             }}
-            className="w-36 px-3 py-2 text-right text-[22px] font-black text-primary rounded-xl border border-primary/30 bg-background outline-none focus:ring-2 focus:ring-ring"
+            className="w-32 px-2 py-1.5 text-right text-[20px] font-black text-primary rounded-lg border border-primary/30 bg-background outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <div className="flex items-center justify-between gap-2 text-[11px]">
+        <div className="flex items-center justify-between gap-2 text-[11px] mt-1">
           <span className="text-muted-foreground">
-            {priceIsCustom ? `Своя цена · после оплаты к оплате ${money(nextDue)}` : `После оплаты к оплате ${money(nextDue)}`}
-            {extrasSum > 0 ? ` · всего сейчас ${money(totalToPay)}` : ""}
+            {priceIsCustom ? "Своя цена · " : ""}после оплаты {money(nextDue)}
+            {extrasSum > 0 ? ` · сейчас ${money(totalToPay)}` : ""}
           </span>
           {priceIsCustom && (
             <button
@@ -595,10 +375,132 @@ export function BookingPaymentForm({
         </div>
       </div>
 
+      {useRules && !isSplit && suggestedRule && !selectedRuleId && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold text-foreground truncate">{formatRuleLabel(suggestedRule, pmLabels)}</div>
+            <div className="text-[11px] text-muted-foreground">
+              экономия {money(Math.max(0, selectedNights * roomPrice - calcPaymentWithRule(roomPrice, Math.max(1, selectedNights), suggestedRule)))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRuleId(suggestedRule.id);
+              manualNightly.current = null;
+              setAmountManual(false);
+            }}
+            className="shrink-0 px-3 py-1.5 text-[12px] font-bold rounded-lg text-white"
+            style={{ background: "hsl(var(--success))" }}
+          >
+            Применить скидку
+          </button>
+        </div>
+      )}
+      {useRules && selectedRule && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-[12px]">
+          <span className={`font-semibold truncate ${selectedRuleUnmet ? "text-destructive" : "text-success"}`}>
+            {selectedRuleUnmet ? `Не подходит: ${selectedRuleUnmet}` : `Скидка: ${formatRuleLabel(selectedRule, pmLabels)}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRuleId("");
+              manualNightly.current = null;
+              setAmountManual(false);
+            }}
+            className="shrink-0 font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Убрать
+          </button>
+        </div>
+      )}
+      {selectedRuleUnmet && (
+        <p className="text-[12px] text-destructive font-semibold">Условия скидки не выполнены: {selectedRuleUnmet}</p>
+      )}
+      {!useRules && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-[11px] font-bold text-muted-foreground">
+            Скидка, %
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={discountPercent}
+              onChange={(e) => setDiscountPercent(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 text-[13px] rounded-lg border border-border bg-muted outline-none"
+            />
+          </label>
+          <label className="text-[11px] font-bold text-muted-foreground">
+            Скидка, ₽/сут.
+            <input
+              type="number"
+              min={0}
+              value={discountPerNight}
+              onChange={(e) => setDiscountPerNight(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 text-[13px] rounded-lg border border-border bg-muted outline-none"
+            />
+          </label>
+        </div>
+      )}
+
+      {allNightsPaid ? (
+        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-[12px] text-muted-foreground">
+          Все ночи до выезда уже оплачены{extrasSel.length ? " — будет оплачена только доплата." : "."}
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold text-muted-foreground">Ночей</span>
+          <button
+            type="button"
+            onClick={() => setNightsCount(String(Math.max(nightsOptional ? 0 : 1, selectedNights - 1)))}
+            className="w-8 h-8 rounded-lg border border-border font-bold"
+          >
+            −
+          </button>
+          <input
+            type="number"
+            min={nightsOptional ? 0 : 1}
+            max={maxPayNights}
+            value={nightsCount}
+            onChange={(e) => {
+              setPeriodMode("nights");
+              setNightsCount(e.target.value);
+            }}
+            className="w-16 px-2 py-1.5 text-center text-[15px] font-bold rounded-lg border border-border bg-muted outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => setNightsCount(String(Math.min(maxPayNights, selectedNights + 1)))}
+            className="w-8 h-8 rounded-lg border border-border font-bold"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriodMode(periodMode === "date" ? "nights" : "date")}
+            className="text-[12px] font-semibold text-primary"
+          >
+            {selectedNights > 0 ? `до ${fmtDate(parseMskDate(selectedPaidThrough))} 12:00` : "только доплата"}
+          </button>
+        </div>
+      )}
+      {!allNightsPaid && periodMode === "date" && (
+        <DatePicker
+          mode="iso"
+          value={paidThrough}
+          onChange={setPaidThrough}
+          min={mskAddDays(firstUnpaidKey, 1)}
+          max={maxPaidThroughKey}
+          className="w-full"
+        />
+      )}
+
       <div>
         <PaymentMethodPicker
           pmConfig={pmConfig}
           total={splitTarget}
+          columns={3}
           value={paymentSel}
           onChange={(sel) => {
             setPaymentSel(sel);

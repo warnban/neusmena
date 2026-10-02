@@ -10,6 +10,7 @@ import { DocumentScanUpload } from "@/components/forms/document-scan-upload";
 import { Icon } from "@/components/icon";
 import { Modal } from "@/components/ui/modal";
 import { fmtDate, dayDiff } from "@/lib/format";
+import { guestStayPlace } from "@/lib/dorm";
 import {
   guestToForm,
   formDisplayName,
@@ -38,7 +39,7 @@ export function CheckInModal({
   const guest = guests.find((g) => g.id === booking.guestId);
   const room = rooms.find((r) => r.id === booking.roomId);
   const bed = booking.bedId ? beds.find((b) => b.id === booking.bedId) : null;
-  const placeLabel = bed ? `койка ${bed.label}` : `№${room?.number ?? ""}`;
+  const placeLabel = guestStayPlace(room?.number, bed?.label);
   const [relocateOpen, setRelocateOpen] = useState(false);
   const hotel = hotels.find((h) => h.id === booking.hotelId);
 
@@ -209,7 +210,7 @@ export function CheckInModal({
                     <span className="text-muted-foreground">Номер</span>
                     <span className="flex items-center gap-2">
                       <span className="font-semibold">
-                        {bed ? `${placeLabel} · комн. ${room?.number ?? ""}` : `${placeLabel} · ${room ? getCategoryLabel(room.category) : ""}`}
+                        {placeLabel}{bed ? "" : room ? ` · ${getCategoryLabel(room.category)}` : ""}
                       </span>
                       <button
                         type="button"

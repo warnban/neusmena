@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, Building2, CreditCard, LogOut, Search, User, X } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
+import { guestStayPlace } from "@/lib/dorm";
 import { Modal } from "@/components/ui/modal";
 import { Icon } from "@/components/icon";
 import { BookingModal } from "@/components/modals/booking-modal";
@@ -26,7 +27,7 @@ function digits(s: string) {
 }
 
 export function QuickLookupModal({ onClose }: { onClose: () => void }) {
-  const { guests, organizations, bookings, rooms, hotels } = useApp();
+  const { guests, organizations, bookings, rooms, beds, hotels } = useApp();
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Selection | null>(null);
 
@@ -201,7 +202,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function GuestCard({ guestId, multiHotel }: { guestId: string; multiHotel: boolean }) {
-  const { guests, bookings, transactions, rooms, hotels, refresh, canWriteHotelOps } = useApp();
+  const { guests, bookings, transactions, rooms, beds, hotels, refresh, canWriteHotelOps } = useApp();
   const guest = guests.find((g) => g.id === guestId);
   const [payBooking, setPayBooking] = useState<Booking | null>(null);
   const [busyId, setBusyId] = useState("");
@@ -229,7 +230,8 @@ function GuestCard({ guestId, multiHotel }: { guestId: string; multiHotel: boole
 
   async function checkout(b: Booking) {
     const room = rooms.find((r) => r.id === b.roomId);
-    if (!confirm(`Выселить ${b.guestName} из №${room?.number ?? "—"}? Будет создана задача уборки.`)) return;
+    const place = guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
+    if (!confirm(`Выселить ${b.guestName} из ${place}? Будет создана задача уборки.`)) return;
     setBusyId(b.id);
     setError("");
     try {
@@ -282,6 +284,7 @@ function GuestCard({ guestId, multiHotel }: { guestId: string; multiHotel: boole
           <div className="space-y-2">
             {activeBookings.map((b) => {
               const room = rooms.find((r) => r.id === b.roomId);
+              const place = guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
               const hotel = hotels.find((h) => h.id === b.hotelId);
               const paid = accommodationPaidTotal(b, transactions);
               const left = Math.max(0, b.amount - paid);
@@ -291,7 +294,7 @@ function GuestCard({ guestId, multiHotel }: { guestId: string; multiHotel: boole
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold text-foreground">
-                        №{room?.number ?? "—"}
+                        {place}
                         {multiHotel && hotel ? <span className="font-normal text-muted-foreground"> · {hotel.name}</span> : null}
                       </p>
                       <p className="text-[11px] text-muted-foreground">

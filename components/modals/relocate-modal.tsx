@@ -5,7 +5,7 @@ import { X, ArrowRightLeft, Search, BedDouble } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { Modal } from "@/components/ui/modal";
 import { DORM_GENDER_LABELS } from "@/lib/constants";
-import { guestGenderMatchesDorm } from "@/lib/dorm";
+import { guestGenderMatchesDorm, guestStayPlace } from "@/lib/dorm";
 import { fmtDate, inits, money } from "@/lib/format";
 import { mskDateKey } from "@/lib/msk-time";
 import { relocationPricing } from "@/lib/booking-relocation";
@@ -225,9 +225,9 @@ export function RelocateModal({
     }
   }
 
-  const fromLabel = fromBed ? `койка ${fromBed.label}` : `№${fromRoom?.number ?? "—"}`;
+  const fromLabel = guestStayPlace(fromRoom?.number, fromBed?.label);
   const toBedLabel = isTargetDorm ? selectedTarget?.beds.find((b) => b.bedId === newBedId)?.label : null;
-  const toLabel = toBedLabel ? `койка ${toBedLabel}` : `№${selectedTarget?.number ?? ""}`;
+  const toLabel = guestStayPlace(selectedTarget?.number, toBedLabel);
   const ready = Boolean(newRoomId && (!isTargetDorm || newBedId));
   const amountAfter = pricing ? (keepPrice ? selectedBooking!.amount : pricing.newAmount) : 0;
   const overpaid = selectedBooking && pricing ? Math.max(0, selectedBooking.paid - amountAfter) : 0;
@@ -300,7 +300,7 @@ export function RelocateModal({
                   filtered.map((b) => {
                     const room = rooms.find((r) => r.id === b.roomId);
                     const bed = b.bedId ? beds.find((bd) => bd.id === b.bedId) : null;
-                    const place = bed ? `койка ${bed.label}` : `№${room?.number}`;
+                    const place = guestStayPlace(room?.number, bed?.label);
                     const active = selectedBooking?.id === b.id;
                     return (
                       <button

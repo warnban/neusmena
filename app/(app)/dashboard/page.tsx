@@ -27,6 +27,7 @@ import {
 } from "@/lib/booking-payment-due";
 import { mskDayAfter, mskDateKey, parseMskDateKey } from "@/lib/msk-time";
 import { isAwaitingCheckIn } from "@/lib/booking-arrivals";
+import { guestStayPlace } from "@/lib/dorm";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits } from "@/lib/format";
 import { calcKpis } from "@/lib/reporting";
@@ -157,7 +158,7 @@ function GuestRow({
       <div className="flex-1 min-w-0">
         <div className="text-[12px] font-medium text-foreground truncate">{booking.guestName}</div>
         <div className={`text-[10px] truncate ${sublineWarn ? "text-warning font-medium" : "text-muted-foreground"}`}>
-          {roomNumber ? `№${roomNumber}` : ""}
+          {roomNumber || ""}
           {subline ? `${roomNumber ? " · " : ""}${subline}` : ""}
         </div>
       </div>
@@ -447,6 +448,7 @@ export default function DashboardPage() {
             <div className="flex-1 space-y-0 min-h-[120px] max-h-80 overflow-y-auto custom-scrollbar">
               {payDue.map((b) => {
                 const room = rooms.find((r) => r.id === b.roomId);
+                const place = guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
                 const due = paymentDueInfo(b, mskDateKey(), scopedTxns);
                 const fromLabel = due.firstUnpaidNightKey
                   ? fmtDate(parseMskDateKey(due.firstUnpaidNightKey))
@@ -455,7 +457,7 @@ export default function DashboardPage() {
                   <GuestRow
                     key={b.id}
                     booking={b}
-                    roomNumber={room?.number}
+                    roomNumber={place}
                     subline={`${money(due.debt)}${due.debtNights > 0 ? ` · ${due.debtNights} н.` : ""}${fromLabel ? ` · с ${fromLabel}` : ""}`}
                     btnLabel="Оплатить"
                     primary
@@ -482,12 +484,13 @@ export default function DashboardPage() {
             <div className="max-h-80 overflow-y-auto custom-scrollbar">
               {arrivals.map((b) => {
                 const room = rooms.find((r) => r.id === b.roomId);
+                const place = guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
                 const late = mskDateKey(b.checkIn) < todayKey;
                 return (
                   <GuestRow
                     key={b.id}
                     booking={b}
-                    roomNumber={room?.number}
+                    roomNumber={place}
                     subline={late ? `заезд ${fmtDate(b.checkIn)}` : "сегодня"}
                     sublineWarn={late}
                     btnLabel="Заселить"
@@ -510,8 +513,9 @@ export default function DashboardPage() {
             <div className="max-h-80 overflow-y-auto custom-scrollbar">
               {departures.map((b) => {
                 const room = rooms.find((r) => r.id === b.roomId);
+                const place = guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
                 return (
-                  <GuestRow key={b.id} booking={b} roomNumber={room?.number} btnLabel="Выселить" onAction={() => { setSelBooking(b); setBookingTab("details"); }} />
+                  <GuestRow key={b.id} booking={b} roomNumber={place} btnLabel="Выселить" onAction={() => { setSelBooking(b); setBookingTab("details"); }} />
                 );
               })}
               {departures.length === 0 && <p className="text-[12px] text-muted-foreground/70 py-4">Нет записей.</p>}
@@ -529,6 +533,7 @@ export default function DashboardPage() {
             <div className="max-h-80 overflow-y-auto custom-scrollbar">
               {stayReminders.map(({ booking: b, kinds }) => {
                 const room = rooms.find((r) => r.id === b.roomId);
+                const place = guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
                 const kindLabels = kinds.map((k) => STAY_REMINDER_LABEL[k]).join(" · ");
                 const soon = kinds.includes("paymentSoon") ? paymentSoonInfo(b, mskDateKey(), scopedTxns) : null;
                 const subline = [
@@ -542,7 +547,7 @@ export default function DashboardPage() {
                   <GuestRow
                     key={b.id}
                     booking={b}
-                    roomNumber={room?.number}
+                    roomNumber={place}
                     subline={subline}
                     btnLabel={payFirst ? "Оплатить" : "Бронь"}
                     primary={payFirst}

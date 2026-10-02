@@ -12,6 +12,7 @@ import { GuestFlagBadges, GuestFlagWarning } from "@/components/guests/guest-fla
 import { TableSkeleton } from "@/components/ui/primitives";
 import { Icon } from "@/components/icon";
 import { useApp } from "@/components/providers/app-data";
+import { guestStayPlace } from "@/lib/dorm";
 import { Modal } from "@/components/ui/modal";
 import { money, fmtDate, inits, dayDiff } from "@/lib/format";
 import { MIG_REG_STATUS } from "@/lib/constants";
@@ -307,7 +308,7 @@ export default function GuestsPage() {
                         <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-warning/15 text-warning flex-shrink-0" title="Проблемный гость">!</span>
                       ) : null}
                       {isStaying && (
-                        <AttributeTag label={`№${stayRoom?.number}`} dotColor="hsl(var(--success))" className="flex-shrink-0" />
+                        <AttributeTag label={guestStayPlace(stayRoom?.number, stayBk?.bedId ? beds.find((bd) => bd.id === stayBk.bedId)?.label : null)} dotColor="hsl(var(--success))" className="flex-shrink-0" />
                       )}
                       {g.isForeigner && <span className="eyebrow text-[9px] flex-shrink-0">ИНО</span>}
                     </div>
@@ -715,7 +716,7 @@ export default function GuestsPage() {
                   return (
                     <div key={b.id} className="px-4 py-3.5 flex items-center justify-between hover:bg-muted/50 border-b border-border/40">
                       <div>
-                        <div className="text-[13px] font-bold text-foreground">№{room?.number} · {room ? getCategoryLabel(room.category) : ""}</div>
+                        <div className="text-[13px] font-bold text-foreground">{guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null)} · {room ? getCategoryLabel(room.category) : ""}</div>
                         <div className="text-[11px] text-muted-foreground">{fmtDate(b.checkIn, true)} — {fmtDate(b.checkOut, true)} · {dayDiff(b.checkIn, b.checkOut)} ночей</div>
                       </div>
                       <div className="flex items-center gap-2.5">

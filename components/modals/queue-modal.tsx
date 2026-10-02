@@ -7,6 +7,7 @@ import { money, fmtDate, inits } from "@/lib/format";
 import { filterPaymentDueBookings, paymentDueInfo } from "@/lib/booking-payment-due";
 import { mskDateKey } from "@/lib/msk-time";
 import { isAwaitingCheckIn } from "@/lib/booking-arrivals";
+import { guestStayPlace } from "@/lib/dorm";
 import type { Booking } from "@/lib/types";
 import { CheckInModal } from "@/components/modals/check-in-modal";
 import { BookingModal } from "@/components/modals/booking-modal";
@@ -19,7 +20,7 @@ export function QueueModal({
   mode: "arrival" | "departure" | "payment";
   onClose: () => void;
 }) {
-  const { bookings, rooms, hotelId, transactions, refresh } = useApp();
+  const { bookings, rooms, beds, hotelId, transactions, refresh } = useApp();
   const [checkInBooking, setCheckInBooking] = useState<Booking | null>(null);
   const [selBooking, setSelBooking] = useState<Booking | null>(null);
   const [stayChangeMode, setStayChangeMode] = useState(false);
@@ -72,6 +73,7 @@ export function QueueModal({
           <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2 custom-scrollbar">
             {list.map((b) => {
               const room = rooms.find((r) => r.id === b.roomId);
+              const place = guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
               const due = mode === "payment" ? paymentDueInfo(b, mskDateKey(), scopedTxns) : null;
               const debt = due?.debt ?? b.amount - b.paid;
               const debtNights = due?.debtNights ?? 0;
@@ -83,7 +85,7 @@ export function QueueModal({
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-bold text-foreground truncate">{b.guestName}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      №{room?.number} · {fmtDate(b.checkIn, true)} → {fmtDate(b.checkOut, true)}
+                      {place} · {fmtDate(b.checkIn, true)} → {fmtDate(b.checkOut, true)}
                       {debt > 0 ? ` · долг ${money(debt)}${debtNights > 0 ? ` (${debtNights} н.)` : ""}` : ""}
                     </div>
                   </div>

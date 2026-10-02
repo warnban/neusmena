@@ -39,6 +39,14 @@ export function formatDormPlaceLabel(roomLabel: string, bedLabel: string): strin
   return `${room}/${bed}`;
 }
 
+/** Как показывать место гостя: «6/22» для койки, «№14» для отдельного номера. */
+export function guestStayPlace(roomNumber?: string | null, bedLabel?: string | null): string {
+  const room = (roomNumber ?? "").trim();
+  const bed = (bedLabel ?? "").trim();
+  if (bed) return formatDormPlaceLabel(room, bed);
+  return room ? `№${room}` : "—";
+}
+
 /** Подпись статуса места в дропдауне бронирования. */
 function placeStatusHint(status: RoomStatus): string {
   if (status === "cleaning") return " · уборка";

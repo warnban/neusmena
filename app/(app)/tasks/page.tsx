@@ -18,6 +18,7 @@ import { fmtDate } from "@/lib/format";
 import { filterPaymentDueBookings, paymentDueInfo } from "@/lib/booking-payment-due";
 import { effectiveMigStatus } from "@/lib/guest-form";
 import { fmtMskDateTime, mskDateKey } from "@/lib/msk-time";
+import { guestStayPlace } from "@/lib/dorm";
 import { isOpsTaskOverdue, type OpsTask } from "@/lib/ops-tasks";
 import type { Booking, Guest, HkTask } from "@/lib/types";
 
@@ -96,7 +97,7 @@ function ruDateToKey(ru: string): string {
 
 export default function TasksPage() {
   const {
-    bookings, rooms, guests, hkTasks, transactions, hotelId, loading, getCategoryLabel,
+    bookings, rooms, beds, guests, hkTasks, transactions, hotelId, loading, getCategoryLabel,
     staff, currentUser, canWriteHotelOps, refresh, refreshSilent,
   } = useApp();
   const router = useRouter();
@@ -168,6 +169,8 @@ export default function TasksPage() {
     const today = new Date();
     const isSameDay = (a: Date) => a.toDateString() === today.toDateString();
     const roomOf = (b: Booking) => rooms.find((r) => r.id === b.roomId);
+    const placeOf = (b: Booking) =>
+      guestStayPlace(roomOf(b)?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null);
 
     const stayingGuestIds = new Set<string>();
     const scopedGuestIds = new Set<string>();
@@ -203,7 +206,7 @@ export default function TasksPage() {
         kind: "payment",
         priority: "high",
         title: `Принять оплату — ${b.guestName}`,
-        subtitle: `№${roomOf(b)?.number ?? "—"} · долг ${Math.round(due.debt).toLocaleString("ru")} ₽`,
+        subtitle: `${placeOf(b)} · долг ${Math.round(due.debt).toLocaleString("ru")} ₽`,
         overdue: true,
         icon: "CreditCard",
         href: "/bookings",
@@ -219,7 +222,7 @@ export default function TasksPage() {
           kind: "checkin",
           priority: "med",
           title: `Заселить — ${b.guestName}`,
-          subtitle: `№${room?.number ?? "—"} · ${room ? getCategoryLabel(room.category) : ""}`,
+          subtitle: `${placeOf(b)} · ${room ? getCategoryLabel(room.category) : ""}`,
           due: fmtDate(b.checkIn, true),
           overdue: false,
           icon: "UserCheck",
@@ -234,7 +237,7 @@ export default function TasksPage() {
           kind: "checkout",
           priority: late ? "high" : "med",
           title: `Оформить выезд — ${b.guestName}`,
-          subtitle: `№${roomOf(b)?.number ?? "—"}${late ? " · дата выезда прошла" : ""}`,
+          subtitle: `${placeOf(b)}${late ? " · дата выезда прошла" : ""}`,
           due: fmtDate(b.checkOut, true),
           overdue: late,
           icon: "LogOut",
@@ -362,7 +365,10 @@ export default function TasksPage() {
           kind: "checkout",
           priority: "low",
           title: `Выселен — ${b.guestName}`,
-          subtitle: `№${rooms.find((r) => r.id === b.roomId)?.number ?? "—"}`,
+          subtitle: guestStayPlace(
+            rooms.find((r) => r.id === b.roomId)?.number,
+            b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null
+          ),
           due: b.checkedOutAt ? fmtMskDateTime(new Date(b.checkedOutAt)) : undefined,
           overdue: false,
           icon: "LogOut",
@@ -404,7 +410,7 @@ export default function TasksPage() {
       }
     }
     return out.sort((a, b) => (b.due ?? "").localeCompare(a.due ?? ""));
-  }, [manual, scopedHk, scopedBookings, scopedTxns, guests, rooms, todayKey]);
+  }, [manual, scopedHk, scopedBookings, scopedTxns, guests, rooms, beds, todayKey]);
 
   const selectedStaff = staff.find((s) => s.id === staffFilter) ?? null;
 

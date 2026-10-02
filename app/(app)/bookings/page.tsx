@@ -13,13 +13,14 @@ import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits, dayDiff } from "@/lib/format";
 import { BOOKING_ST } from "@/lib/constants";
 import { sourceStyle } from "@/lib/booking-sources";
+import { guestStayPlace } from "@/lib/dorm";
 import type { Booking } from "@/lib/types";
 import { Select } from "@/components/ui/select";
 
 const COLS = ["№ брони", "Гость", "Номер", "Даты", "Ноч.", "Источник", "Статус", "Сумма", ""];
 
 export default function BookingsPage() {
-  const { bookings, rooms, guests, hotelId, loading, getCategoryLabel, sourceConfig } = useApp();
+  const { bookings, rooms, beds, guests, hotelId, loading, getCategoryLabel, sourceConfig } = useApp();
   const [search, setSearch] = useState("");
   const [stF, setStF] = useState("all");
   const [srcF, setSrcF] = useState("all");
@@ -155,7 +156,7 @@ export default function BookingsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-[12px] text-muted-foreground whitespace-nowrap">
-                        №{room?.number} · {room ? getCategoryLabel(room.category) : ""}
+                        {guestStayPlace(room?.number, b.bedId ? beds.find((bd) => bd.id === b.bedId)?.label : null)} · {room ? getCategoryLabel(room.category) : ""}
                       </td>
                       <td className="px-4 py-2.5 tabular text-[12px] text-foreground/80 whitespace-nowrap">
                         {fmtDate(b.checkIn, true)} — {fmtDate(b.checkOut, true)}
@@ -229,7 +230,7 @@ export default function BookingsPage() {
               </div>
               <dl className="divide-y divide-border text-[13px]">
                 {[
-                  ["Номер", `№${room?.number ?? "—"} · ${room ? getCategoryLabel(room.category) : ""}`],
+                  ["Номер", `${guestStayPlace(room?.number, peek.bedId ? beds.find((bd) => bd.id === peek.bedId)?.label : null)} · ${room ? getCategoryLabel(room.category) : ""}`],
                   ["Заезд", fmtDate(peek.checkIn, true)],
                   ["Выезд", fmtDate(peek.checkOut, true)],
                   ["Ночей", String(nights)],

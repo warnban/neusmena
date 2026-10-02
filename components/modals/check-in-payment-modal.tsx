@@ -10,6 +10,7 @@ import type { Booking } from "@/lib/types";
 import type { GuestFormData } from "@/lib/guest-form";
 import { formDisplayName } from "@/lib/guest-form";
 import { BookingPaymentForm, type BookingPaymentPayload } from "@/components/bookings/booking-payment-form";
+import { guestStayPlace } from "@/lib/dorm";
 import { Modal } from "@/components/ui/modal";
 
 export function CheckInPaymentModal({
@@ -27,8 +28,9 @@ export function CheckInPaymentModal({
   onClose: () => void;
   onDone?: () => void;
 }) {
-  const { rooms, hotelDiscountRules, refresh } = useApp();
+  const { rooms, beds, hotelDiscountRules, refresh } = useApp();
   const room = rooms.find((r) => r.id === booking.roomId);
+  const bed = booking.bedId ? beds.find((b) => b.id === booking.bedId) : undefined;
   const roomPrice = room?.price ?? 0;
   const useRules = hotelHasDiscountRules(hotelDiscountRules, booking.hotelId);
 
@@ -118,7 +120,7 @@ export function CheckInPaymentModal({
           <div>
             <h2 className="text-[15px] font-bold text-foreground">Оплата проживания</h2>
             <p className="text-[12px] text-muted-foreground">
-              {displayGuestName} · №{room?.number}
+              {displayGuestName} · {guestStayPlace(room?.number, bed?.label)}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Закрыть" className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted">
