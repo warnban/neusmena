@@ -66,11 +66,11 @@ export function formatBookingPlaceOptionLabel(slot: {
   return `${slot.number}${hint} · ${slot.category} · ${slot.money(slot.price)}/сут.`;
 }
 
-/** Подпись статуса койки для карточки в номерном фонде */
+/** Подпись статуса койки для карточки в номерном фонде. Живой гость важнее устаревшего статуса койки. */
 export function bedCardStatusLabel(status: RoomStatus, guestName: string | null): string {
+  if (guestName) return guestName;
   if (status === "cleaning") return "Уборка";
   if (status === "available") return "Свободен";
-  if (guestName) return guestName;
   if (status === "maintenance") return "Ремонт";
   if (status === "checkout") return "Выезд";
   return "Занят";

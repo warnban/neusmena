@@ -6,6 +6,7 @@ import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits } from "@/lib/format";
 import { filterPaymentDueBookings, paymentDueInfo } from "@/lib/booking-payment-due";
 import { mskDateKey } from "@/lib/msk-time";
+import { isAwaitingCheckIn } from "@/lib/booking-arrivals";
 import type { Booking } from "@/lib/types";
 import { CheckInModal } from "@/components/modals/check-in-modal";
 import { BookingModal } from "@/components/modals/booking-modal";
@@ -18,7 +19,7 @@ export function QueueModal({
   mode: "arrival" | "departure" | "payment";
   onClose: () => void;
 }) {
-  const { bookings, rooms, hotelId, transactions } = useApp();
+  const { bookings, rooms, hotelId, transactions, refresh } = useApp();
   const [checkInBooking, setCheckInBooking] = useState<Booking | null>(null);
   const [selBooking, setSelBooking] = useState<Booking | null>(null);
   const [stayChangeMode, setStayChangeMode] = useState(false);
@@ -38,9 +39,10 @@ export function QueueModal({
 
   const list = useMemo(() => {
     if (mode === "arrival") {
-      return scoped.filter(
-        (b) => sameDay(b.checkIn, TODAY) && (b.status === "new" || b.status === "confirmed")
-      );
+      const todayKey = mskDateKey(TODAY);
+      return scoped
+        .filter((b) => isAwaitingCheckIn(b, todayKey))
+        .sort((a, b) => +new Date(a.checkIn) - +new Date(b.checkIn));
     }
     if (mode === "departure") {
       return scoped.filter(
@@ -48,7 +50,7 @@ export function QueueModal({
       );
     }
     return filterPaymentDueBookings(scoped, mskDateKey(), scopedTxns);
-  }, [scoped, mode, scopedTxns]);
+  }, [scoped, mode, scopedTxns, TODAY]);
 
   const title =
     mode === "arrival"
@@ -87,13 +89,34 @@ export function QueueModal({
                   </div>
                   <div className="flex flex-col gap-1.5 flex-shrink-0">
                     {mode === "arrival" ? (
-                      <button
-                        onClick={() => setCheckInBooking(b)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 text-white text-[11px] font-bold rounded-lg hover:opacity-90"
-                        style={{ background: "hsl(var(--success))" }}
-                      >
-                        <UserCheck size={12} /> Заселить
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setCheckInBooking(b)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-white text-[11px] font-bold rounded-lg hover:opacity-90"
+                          style={{ background: "hsl(var(--success))" }}
+                        >
+                          <UserCheck size={12} /> Заселить
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`Отменить бронь ${b.guestName}?`)) return;
+                            const res = await fetch(`/api/bookings/${b.id}/status`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ status: "cancelled" }),
+                            });
+                            if (!res.ok) {
+                              const data = await res.json().catch(() => ({}));
+                              window.alert(typeof data.error === "string" ? data.error : "Не удалось отменить бронь");
+                              return;
+                            }
+                            await refresh();
+                          }}
+                          className="px-2.5 py-1.5 text-[11px] font-bold rounded-lg text-destructive hover:bg-destructive/10"
+                        >
+                          Отменить
+                        </button>
+                      </>
                     ) : mode === "departure" ? (
                       <>
                         <button
@@ -125,7 +148,7 @@ export function QueueModal({
             })}
             {list.length === 0 && (
               <p className="text-center text-[13px] text-muted-foreground py-8">
-                {mode === "payment" ? "Нет неоплаченных гостей" : "Нет записей на сегодня"}
+                {mode === "payment" ? "Нет неоплаченных гостей" : mode === "arrival" ? "Нет броней, ожидающих заселения" : "Нет записей на сегодня"}
               </p>
             )}
           </div>

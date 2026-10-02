@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { setBedStatus, syncDormRoomStatus } from "@/lib/dorm.server";
+import { placeHasCheckedInGuest, setBedStatus } from "@/lib/dorm.server";
 
 export async function PATCH(
   req: NextRequest,
@@ -46,12 +46,7 @@ export async function PATCH(
   });
 
   if (status === "done") {
-    const guestStillThere =
-      task.category === "scheduled" &&
-      task.booking &&
-      task.booking.status === "checkedin" &&
-      task.booking.checkOut >= new Date(new Date().setHours(0, 0, 0, 0));
-
+    const guestStillThere = await placeHasCheckedInGuest({ bedId: task.bedId, roomId: task.roomId });
     if (task.bedId) {
       await setBedStatus(task.bedId, guestStillThere ? "occupied" : "available");
     } else if (task.roomId) {

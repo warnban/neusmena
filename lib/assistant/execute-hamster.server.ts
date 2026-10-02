@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { assertHotelWrite } from "@/lib/permissions";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
-import { setBedStatus } from "@/lib/dorm.server";
+import { placeHasCheckedInGuest, setBedStatus } from "@/lib/dorm.server";
 import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel } from "@/lib/housekeeping";
 import {
   assertPaymentOperationAllowed,
@@ -337,11 +337,7 @@ export async function executeHkComplete(
     data: { status: "done", completedAt: new Date() },
   });
 
-  const guestStillThere =
-    task.category === "scheduled" &&
-    task.booking &&
-    task.booking.status === "checkedin" &&
-    task.booking.checkOut >= new Date(new Date().setHours(0, 0, 0, 0));
+  const guestStillThere = await placeHasCheckedInGuest({ bedId: task.bedId, roomId: task.roomId });
 
   if (task.bedId) {
     await setBedStatus(task.bedId, guestStillThere ? "occupied" : "available");

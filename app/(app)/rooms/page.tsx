@@ -209,7 +209,8 @@ export default function RoomsPage() {
                                 {roomBedList.map((bed) => {
                                   const guestName = guestByBedId.get(bed.id) ?? null;
                                   const label = bedCardStatusLabel(bed.status, guestName);
-                                  const bedRs = ROOM_STATUS[bed.status] ?? ROOM_STATUS.available!;
+                                  const shownStatus = guestName && bed.status === "available" ? "occupied" : bed.status;
+                                  const bedRs = ROOM_STATUS[shownStatus] ?? ROOM_STATUS.available!;
                                   const isGuest = Boolean(guestName);
                                   return (
                                     <div

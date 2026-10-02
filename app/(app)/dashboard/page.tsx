@@ -26,6 +26,7 @@ import {
   type StayReminderKind,
 } from "@/lib/booking-payment-due";
 import { mskDayAfter, mskDateKey, parseMskDateKey } from "@/lib/msk-time";
+import { isAwaitingCheckIn } from "@/lib/booking-arrivals";
 import { useApp } from "@/components/providers/app-data";
 import { money, fmtDate, inits } from "@/lib/format";
 import { calcKpis } from "@/lib/reporting";
@@ -131,16 +132,22 @@ function GuestRow({
   booking,
   roomNumber,
   subline,
+  sublineWarn,
   btnLabel,
   primary,
   onAction,
+  secondaryLabel,
+  onSecondary,
 }: {
   booking: Booking;
   roomNumber?: string;
   subline?: string;
+  sublineWarn?: boolean;
   btnLabel: string;
   primary?: boolean;
   onAction: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }) {
   return (
     <div className="flex items-center gap-2.5 py-2 border-b border-border last:border-0">
@@ -149,28 +156,39 @@ function GuestRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[12px] font-medium text-foreground truncate">{booking.guestName}</div>
-        <div className="text-[10px] text-muted-foreground truncate">
+        <div className={`text-[10px] truncate ${sublineWarn ? "text-warning font-medium" : "text-muted-foreground"}`}>
           {roomNumber ? `№${roomNumber}` : ""}
           {subline ? `${roomNumber ? " · " : ""}${subline}` : ""}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onAction}
-        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md flex-shrink-0 transition-colors ${
-          primary
-            ? "bg-primary text-primary-foreground hover:bg-primary/90"
-            : "border border-border text-foreground hover:bg-muted"
-        }`}
-      >
-        {btnLabel}
-      </button>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {secondaryLabel && onSecondary && (
+          <button
+            type="button"
+            onClick={onSecondary}
+            className="px-2 py-1 text-[11px] font-semibold rounded-md text-destructive hover:bg-destructive/10"
+          >
+            {secondaryLabel}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onAction}
+          className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors ${
+            primary
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "border border-border text-foreground hover:bg-muted"
+          }`}
+        >
+          {btnLabel}
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function DashboardPage() {
-  const { bookings, rooms, beds, hotels, hotelId, transactions, paymentMethods, loading } = useApp();
+  const { bookings, rooms, beds, hotels, hotelId, transactions, paymentMethods, loading, refresh } = useApp();
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [checkInBooking, setCheckInBooking] = useState<Booking | null>(null);
   const [selBooking, setSelBooking] = useState<Booking | null>(null);
@@ -209,9 +227,25 @@ export default function DashboardPage() {
     [scopedTxns, scopedBookings, scopedRooms, scopedBeds, codes.join(",")]
   );
 
-  const arrivals = scopedBookings.filter(
-    (b) => sameDay(b.checkIn, TODAY) && (b.status === "new" || b.status === "confirmed")
-  );
+  const todayKey = mskDateKey(TODAY);
+  const arrivals = scopedBookings
+    .filter((b) => isAwaitingCheckIn(b, todayKey))
+    .sort((a, b) => mskDateKey(a.checkIn).localeCompare(mskDateKey(b.checkIn)) || a.guestName.localeCompare(b.guestName, "ru"));
+
+  async function cancelArrival(booking: Booking) {
+    if (!window.confirm(`Отменить бронь ${booking.guestName}?`)) return;
+    const res = await fetch(`/api/bookings/${booking.id}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      window.alert(typeof data.error === "string" ? data.error : "Не удалось отменить бронь");
+      return;
+    }
+    await refresh();
+  }
   const departures = scopedBookings.filter(
     (b) => sameDay(b.checkOut, TODAY) && b.status === "checkedin"
   );
@@ -292,7 +326,7 @@ export default function DashboardPage() {
             <Metric
               label="Заезды"
               value={String(arrivals.length)}
-              sub="сегодня"
+              sub="ждут заселения"
               icon={<LogIn size={15} />}
               color="hsl(var(--success))"
               bg="hsl(var(--success) / 0.12)"
@@ -410,8 +444,8 @@ export default function DashboardPage() {
             {payDueTotal > 0 && (
               <p className="text-[11px] text-muted-foreground mb-2">Долг: <span className="tabular">{money(payDueTotal)}</span></p>
             )}
-            <div className="flex-1 space-y-0 min-h-[120px]">
-              {payDue.slice(0, 5).map((b) => {
+            <div className="flex-1 space-y-0 min-h-[120px] max-h-80 overflow-y-auto custom-scrollbar">
+              {payDue.map((b) => {
                 const room = rooms.find((r) => r.id === b.roomId);
                 const due = paymentDueInfo(b, mskDateKey(), scopedTxns);
                 const fromLabel = due.firstUnpaidNightKey
@@ -433,29 +467,35 @@ export default function DashboardPage() {
                 <p className="text-[12px] text-muted-foreground/70 py-8">Нет должников на сегодня.</p>
               )}
             </div>
-            {payDue.length > 5 && (
-              <button
-                type="button"
-                onClick={() => setQueueMode("payment")}
-                className="mt-2 text-[11px] font-semibold text-primary hover:underline text-left"
-              >
-                Все ({payDue.length}) →
-              </button>
-            )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-card rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between border-b border-border pb-1.5 mb-3">
-              <h3 className="eyebrow">Заезды сегодня</h3>
+              <div>
+                <h3 className="eyebrow">Заезды</h3>
+                <p className="text-[10px] text-muted-foreground mt-0.5">сегодня и не заселённые раньше</p>
+              </div>
               <span className="tabular text-[12px] font-semibold text-warning">{arrivals.length}</span>
             </div>
-            <div className="space-y-0">
-              {arrivals.slice(0, 4).map((b) => {
+            <div className="max-h-80 overflow-y-auto custom-scrollbar">
+              {arrivals.map((b) => {
                 const room = rooms.find((r) => r.id === b.roomId);
+                const late = mskDateKey(b.checkIn) < todayKey;
                 return (
-                  <GuestRow key={b.id} booking={b} roomNumber={room?.number} btnLabel="Заселить" primary onAction={() => setCheckInBooking(b)} />
+                  <GuestRow
+                    key={b.id}
+                    booking={b}
+                    roomNumber={room?.number}
+                    subline={late ? `заезд ${fmtDate(b.checkIn)}` : "сегодня"}
+                    sublineWarn={late}
+                    btnLabel="Заселить"
+                    primary
+                    onAction={() => setCheckInBooking(b)}
+                    secondaryLabel="Отменить"
+                    onSecondary={() => cancelArrival(b)}
+                  />
                 );
               })}
               {arrivals.length === 0 && <p className="text-[12px] text-muted-foreground/70 py-4">Нет записей.</p>}
@@ -467,8 +507,8 @@ export default function DashboardPage() {
               <h3 className="eyebrow">Выезды сегодня</h3>
               <span className="tabular text-[12px] font-semibold text-primary">{departures.length}</span>
             </div>
-            <div className="space-y-0">
-              {departures.slice(0, 4).map((b) => {
+            <div className="max-h-80 overflow-y-auto custom-scrollbar">
+              {departures.map((b) => {
                 const room = rooms.find((r) => r.id === b.roomId);
                 return (
                   <GuestRow key={b.id} booking={b} roomNumber={room?.number} btnLabel="Выселить" onAction={() => { setSelBooking(b); setBookingTab("details"); }} />
@@ -486,8 +526,8 @@ export default function DashboardPage() {
               </div>
               <span className="tabular text-[12px] font-semibold text-muted-foreground">{stayReminders.length}</span>
             </div>
-            <div className="space-y-0">
-              {stayReminders.slice(0, 4).map(({ booking: b, kinds }) => {
+            <div className="max-h-80 overflow-y-auto custom-scrollbar">
+              {stayReminders.map(({ booking: b, kinds }) => {
                 const room = rooms.find((r) => r.id === b.roomId);
                 const kindLabels = kinds.map((k) => STAY_REMINDER_LABEL[k]).join(" · ");
                 const soon = kinds.includes("paymentSoon") ? paymentSoonInfo(b, mskDateKey(), scopedTxns) : null;

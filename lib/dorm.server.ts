@@ -34,6 +34,28 @@ export async function syncDormRoomStatus(roomId: string): Promise<RoomStatus> {
   return next;
 }
 
+/** На койке (или в номере без койки) прямо сейчас есть заселённый гость. */
+export async function placeHasCheckedInGuest(place: {
+  bedId?: string | null;
+  roomId?: string | null;
+}): Promise<boolean> {
+  if (place.bedId) {
+    const stay = await prisma.booking.findFirst({
+      where: { bedId: place.bedId, status: "checkedin" },
+      select: { id: true },
+    });
+    return Boolean(stay);
+  }
+  if (place.roomId) {
+    const stay = await prisma.booking.findFirst({
+      where: { roomId: place.roomId, bedId: null, status: "checkedin" },
+      select: { id: true },
+    });
+    return Boolean(stay);
+  }
+  return false;
+}
+
 export async function setBedStatus(bedId: string, status: RoomStatus): Promise<void> {
   const bed = await prisma.bed.update({
     where: { id: bedId },
