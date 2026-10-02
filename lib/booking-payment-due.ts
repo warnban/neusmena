@@ -3,6 +3,7 @@ import { mskAddDays, mskDateKey, mskDayAfter, mskNightDiff, parseMskDateKey } fr
 import type { Booking } from "@/lib/types";
 import type { Transaction } from "@/lib/types";
 import { stayExtrasPaid, stayExtrasTotal } from "@/lib/stay-extras";
+import { unpaidNightTariff } from "@/lib/stay-contract";
 
 type AccommodationTx = Pick<
   Transaction,
@@ -50,8 +51,16 @@ export function accommodationRefundNights(
 /** Ночей предоплаты по транзакциям (paymentNights) или по сумме/тарифу.
  *  Смежные (split) платежи объединяются в одну «оплату» по paymentGroupId,
  *  чтобы одинаковый paymentNights у N частей не считался N раз. */
+type NightSpan = {
+  id: string;
+  checkIn: Date | string;
+  checkOut: Date | string;
+  amount: number;
+  paid: number;
+};
+
 export function prepaidNightsFromTransactions(
-  booking: Booking,
+  booking: Pick<NightSpan, "id" | "checkIn" | "checkOut">,
   transactions?: AccommodationTx[],
   refundNights = accommodationRefundNights(booking.id, transactions)
 ): number | null {
@@ -75,7 +84,7 @@ export function prepaidNightsFromTransactions(
   return Math.min(maxNights, Math.max(0, paidNights - refundNights));
 }
 
-export function bookingStayNights(booking: Booking): number {
+export function bookingStayNights(booking: Pick<NightSpan, "checkIn" | "checkOut">): number {
   return mskNightDiff(booking.checkIn, booking.checkOut);
 }
 
@@ -86,7 +95,10 @@ export function bookingNightlyRate(booking: Booking): number {
 }
 
 /** Ночей, за которые гость уже «находится» в отеле (включая текущие сутки). */
-export function nightsConsumedThrough(booking: Booking, dateKey = mskDateKey()): number {
+export function nightsConsumedThrough(
+  booking: Pick<NightSpan, "checkIn" | "checkOut">,
+  dateKey = mskDateKey()
+): number {
   const today = parseMskDateKey(dateKey);
   const checkIn = startOfDay(new Date(booking.checkIn));
   const checkOut = startOfDay(new Date(booking.checkOut));
@@ -123,7 +135,7 @@ export function accommodationPaidTotal(
 }
 
 export function prepaidNights(
-  booking: Booking,
+  booking: NightSpan,
   paidOverride?: number,
   transactions?: AccommodationTx[],
   refundNights?: number
@@ -131,13 +143,17 @@ export function prepaidNights(
   const fromTx = prepaidNightsFromTransactions(booking, transactions, refundNights);
   if (fromTx != null) return fromTx;
 
-  const nightly = bookingNightlyRate(booking);
+  const nights = bookingStayNights(booking);
+  const extrasOnBooking = stayExtrasTotal(
+    booking as Partial<Pick<Booking, "earlyCheckInFee" | "lateCheckOutFee">>
+  );
+  const nightly = nights > 0 ? Math.round(Math.max(0, booking.amount - extrasOnBooking) / nights) : 0;
   const paidTotal =
     paidOverride ??
     (transactions?.length ? accommodationPaidTotal(booking, transactions) : booking.paid);
   const extrasPaid = transactions?.length
     ? stayExtrasPaid(booking.id, transactions)
-    : Math.min(paidTotal, stayExtrasTotal(booking));
+    : Math.min(paidTotal, extrasOnBooking);
   const paid = paidTotal - extrasPaid;
   if (nightly <= 0 || paid <= 0) return 0;
 
@@ -166,12 +182,12 @@ export function paidThroughDateKey(
 
 /** Первая неоплаченная ночь (дата начала суток, МСК). */
 export function firstUnpaidNightDateKey(
-  booking: Booking,
+  booking: NightSpan,
   paidOverride?: number,
   transactions?: AccommodationTx[],
   refundNights?: number
 ): string {
-  return mskAddDays(mskDateKey(booking.checkIn), prepaidNights(booking, paidOverride, transactions, refundNights));
+  return mskAddDays(mskDateKey(new Date(booking.checkIn)), prepaidNights(booking, paidOverride, transactions, refundNights));
 }
 
 /** Ночей от первой неоплаченной до даты «оплачено до 12:00» (как день выезда). */
@@ -195,14 +211,32 @@ export function isValidPaidThrough(paidThroughKey: string, firstUnpaidKey: strin
   return paidThroughKey > firstUnpaidKey && paidThroughKey <= checkOutKey;
 }
 
+/** Цена ещё не оплаченной ночи: остаток договора, а не средняя по уже внесённым суммам. */
+export function debtNightlyRate(
+  booking: Booking,
+  paid: number,
+  transactions?: Transaction[]
+): number {
+  const prepaid = prepaidNights(booking, paid, transactions);
+  return unpaidNightTariff({
+    amount: booking.amount,
+    paid,
+    stayNights: bookingStayNights(booking),
+    prepaidNights: prepaid,
+    fallbackTariff: bookingNightlyRate(booking),
+  });
+}
+
 export function paymentDueInfo(booking: Booking, dateKey = mskDateKey(), transactions?: Transaction[]) {
   const effectivePaid = accommodationPaidTotal(booking, transactions);
   const contractBooking = { ...booking, paid: effectivePaid };
-  const nightly = bookingNightlyRate(contractBooking);
   const consumed = nightsDueThrough(booking, dateKey);
   const prepaid = prepaidNights(contractBooking, undefined, transactions);
+  const nightly = debtNightlyRate(contractBooking, effectivePaid, transactions);
   const debtNights = isPaymentDueToday(booking, dateKey, transactions) ? Math.max(0, consumed - prepaid) : 0;
-  const debt = debtNights * nightly;
+  const unpaid = Math.max(0, bookingStayNights(booking) - prepaid);
+  const remainder = Math.max(0, contractBooking.amount - effectivePaid);
+  const debt = debtNights <= 0 ? 0 : debtNights >= unpaid ? remainder : debtNights * nightly;
   return {
     debt,
     debtNights,
@@ -261,9 +295,9 @@ export function filterPaymentDueSoonBookings(bookings: Booking[], dateKey = mskD
 export function paymentSoonInfo(booking: Booking, dateKey = mskDateKey(), transactions?: Transaction[]) {
   const effectivePaid = accommodationPaidTotal(booking, transactions);
   const contractBooking = { ...booking, paid: effectivePaid };
-  const nightly = bookingNightlyRate(contractBooking);
   const consumed = nightsDueThrough(booking, dateKey);
   const prepaid = prepaidNights(contractBooking, undefined, transactions);
+  const nightly = debtNightlyRate(contractBooking, effectivePaid, transactions);
   const paidThrough = paidThroughDateKey(contractBooking, undefined, transactions);
   const nightsAhead = Math.max(0, prepaid - consumed);
   return { nightly, consumed, prepaidNights: prepaid, paidThroughKey: paidThrough, nightsAhead, effectivePaid };

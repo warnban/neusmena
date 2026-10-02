@@ -7,15 +7,18 @@ import { assertPaymentsOpen } from "@/lib/payment-lock";
 import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import { calcStayAmount } from "@/lib/booking-pricing";
 import { stayExtrasTotal } from "@/lib/stay-extras";
+import { contractAfterNightPayment, contractAfterReopeningNights, contractAfterStayNightDelta, unpaidNightTariff } from "@/lib/stay-contract";
 import { formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
 import { guessGenderFromName } from "@/lib/dorm";
 import { resolveRoomForBooking, hasBookingDateOverlap } from "@/lib/booking-availability.server";
 import {
+  bookingStayNights,
   firstUnpaidNightDateKey,
   isValidPaidThrough,
   nightsFromFirstUnpaidToPaidThrough,
   paidThroughAfterNights,
   paidThroughNote,
+  prepaidNights,
 } from "@/lib/booking-payment-due";
 import { mskAddDays, mskDateKey, mskNightDiff, mskDayAfter, parseMskDateKey } from "@/lib/msk-time";
 import { formatRuleLabel, hotelHasDiscountRules, validatePaymentDiscount } from "@/lib/hotel-discount-rules";
@@ -111,17 +114,16 @@ async function executeRecordPayment(
   ]);
 
   const useRules = hotelHasDiscountRules(discountRules, booking.hotelId);
-  const contractAmount = calcStayAmount({
-    roomPrice: booking.room.price,
-    checkIn: booking.checkIn,
-    checkOut: booking.checkOut,
-    discountPercent: booking.discountPercent ?? 0,
-    discountPerNight: booking.discountPerNight ?? 0,
-    extras: stayExtrasTotal(booking),
+  const stayNights = bookingStayNights(booking);
+  const prepaid = prepaidNights(booking, undefined, existingTx);
+  const tariffPerNight = unpaidNightTariff({
+    amount: booking.amount,
+    paid: booking.paid,
+    stayNights,
+    prepaidNights: prepaid,
+    fallbackTariff: Math.max(0, booking.room.price),
   });
-
-  const pricingBooking = { ...booking, amount: useRules ? booking.amount || contractAmount : contractAmount };
-  const firstUnpaidKey = firstUnpaidNightDateKey(pricingBooking, undefined, existingTx);
+  const firstUnpaidKey = firstUnpaidNightDateKey(booking, undefined, existingTx);
   const checkOutKey = mskDateKey(booking.checkOut);
 
   let payNights = nights;
@@ -140,7 +142,7 @@ async function executeRecordPayment(
   const validation = validatePaymentDiscount({
     rules: discountRules,
     hotelId: booking.hotelId,
-    roomPrice: booking.room.price,
+    roomPrice: tariffPerNight,
     paymentNights: payNights,
     paymentMethod,
     amount,
@@ -165,19 +167,23 @@ async function executeRecordPayment(
   }
 
   const paidThroughDate = paidThroughRaw || paidThroughAfterNights(firstUnpaidKey, payNights);
+  const nightsAmount = validation.expectedAmount;
+  const nextAmount = contractAfterNightPayment({
+    amount: booking.amount,
+    nights: payNights,
+    nightsAmount,
+    tariffPerNight,
+  });
   const appliedRule = validation.rule;
   const noteDiscount = appliedRule
     ? `Скидка: ${formatRuleLabel(appliedRule)}`
-    : !useRules && (validation.discountPercent || validation.discountPerNight)
-      ? "Со скидкой"
-      : null;
+    : nightsAmount !== payNights * tariffPerNight
+      ? `Своя цена ${nightsAmount} ₽`
+      : !useRules && (validation.discountPercent || validation.discountPerNight)
+        ? "Со скидкой"
+        : null;
 
-  const bookingForNote = {
-    ...booking,
-    amount: useRules ? booking.amount : contractAmount,
-    discountPercent: useRules ? booking.discountPercent ?? 0 : validation.discountPercent,
-    discountPerNight: useRules ? booking.discountPerNight ?? 0 : validation.discountPerNight,
-  };
+  const bookingForNote = { ...booking };
 
   await prisma.$transaction([
     prisma.transaction.create({
@@ -194,8 +200,10 @@ async function executeRecordPayment(
         discountRuleId: appliedRule?.id ?? null,
         discountPercentApplied: validation.discountPercent,
         discountPerNightApplied: validation.discountPerNight,
-        note: buildAccommodationPaymentNote(bookingForNote, validation.expectedAmount, {
+        note: buildAccommodationPaymentNote(bookingForNote, nightsAmount, {
           paidBefore: booking.paid,
+          nights: payNights,
+          prepaidNights: prepaid,
           extra: [paidThroughNote(paidThroughDate), noteDiscount].filter(Boolean).join(". "),
           userNote: note || null,
         }),
@@ -205,7 +213,8 @@ async function executeRecordPayment(
     prisma.booking.update({
       where: { id: booking.id },
       data: {
-        paid: { increment: validation.expectedAmount },
+        paid: { increment: nightsAmount },
+        amount: nextAmount,
         ...(channelId ? { channelId } : {}),
       },
     }),
@@ -259,16 +268,18 @@ async function executeExtendStay(session: SessionPayload, payload: Record<string
   }
 
   const newCheckOut = parseMskDateKey(newCheckOutKey);
-  const newAmount = calcStayAmount({
-    roomPrice: booking.room.price,
-    checkIn: booking.checkIn,
-    checkOut: newCheckOut,
-    discountPercent: booking.discountPercent,
-    discountPerNight: booking.discountPerNight,
-    extras: stayExtrasTotal(booking),
+  const extendTx = await prisma.transaction.findMany({
+    where: { bookingId: booking.id, category: "accommodation", cancelledAt: null },
   });
-
+  const extendTariff = unpaidNightTariff({
+    amount: booking.amount,
+    paid: booking.paid,
+    stayNights: bookingStayNights(booking),
+    prepaidNights: prepaidNights(booking, undefined, extendTx),
+    fallbackTariff: Math.max(0, booking.room.price),
+  });
   const nightDelta = mskNightDiff(booking.checkIn, newCheckOutKey) - mskNightDiff(booking.checkIn, prevCheckOutKey);
+  const newAmount = contractAfterStayNightDelta(booking.amount, nightDelta, extendTariff);
   const amountDelta = newAmount - booking.amount;
 
   await prisma.$transaction([
@@ -335,10 +346,24 @@ async function executeRefund(
   if (quote.recalcNote) refundNote = `${refundNote}. ${quote.recalcNote}`;
   if (withholdNights > 0) refundNote = `${refundNote}. Удержание ${withholdNights} ноч.`;
 
+  const refundTariff = unpaidNightTariff({
+    amount: ctx.booking.amount,
+    paid: ctx.booking.paid,
+    stayNights: bookingStayNights(ctx.booking),
+    prepaidNights: prepaidNights(ctx.booking, undefined, ctx.transactions, ctx.refundNightsTotal),
+    fallbackTariff: Math.max(0, ctx.roomPrice),
+  });
+  const reopenedAmount = contractAfterReopeningNights({
+    amount: ctx.booking.amount,
+    releasedAmount: amount,
+    nights,
+    tariffPerNight: refundTariff,
+  });
+
   const ok = await prisma.$transaction(async (tx) => {
     const dec = await tx.booking.updateMany({
-      where: { id: ctx.booking.id, paid: { gte: amount } },
-      data: { paid: { decrement: amount } },
+      where: { id: ctx.booking.id, paid: { gte: amount }, amount: ctx.booking.amount },
+      data: { paid: { decrement: amount }, amount: reopenedAmount },
     });
     if (dec.count !== 1) throw new Error("REFUND_CONFLICT");
 

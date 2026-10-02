@@ -83,6 +83,19 @@ export function dominantPaymentMethod(payments: AccommodationPaymentSlice[]): st
   return best;
 }
 
+/** Сколько фактически оплачено за первые `nights` ночей (по порядку платежей). */
+function amountForNightsFromStart(payments: AccommodationPaymentSlice[], nights: number): number {
+  let left = Math.max(0, nights);
+  let sum = 0;
+  for (const p of payments) {
+    if (left <= 0) break;
+    const take = Math.min(left, Math.max(0, p.nights));
+    if (p.nights > 0 && take > 0) sum += Math.round((p.amount / p.nights) * take);
+    left -= take;
+  }
+  return sum;
+}
+
 /**
  * Пересчёт возврата с учётом скидок:
  * - обязательство за прожитые ночи (возможен clawback если скидка больше не действует)
@@ -108,13 +121,20 @@ export function computeRefundQuote(input: RefundQuoteInput): RefundQuote {
   const paymentMethod = dominantPaymentMethod(payments);
   const discountWasApplied = payments.some((p) => p.discountRuleId);
 
-  const { amount: obligationAmount, note: obligationNote } = obligationForConsumedNights({
-    roomPrice,
-    consumedNights,
-    paymentMethod,
-    rules: discountWasApplied ? rules : [],
-    hotelId: booking.hotelId,
-  });
+  const paidForConsumed = payments.length ? amountForNightsFromStart(payments, consumedNights) : null;
+  const { amount: obligationAmount, note: obligationNote } =
+    paidForConsumed != null
+      ? {
+          amount: paidForConsumed,
+          note: consumedNights > 0 ? `Прожито ${consumedNights} ноч. по фактически оплаченной цене` : "",
+        }
+      : obligationForConsumedNights({
+          roomPrice,
+          consumedNights,
+          paymentMethod,
+          rules: discountWasApplied ? rules : [],
+          hotelId: booking.hotelId,
+        });
 
   const nightlyBase = baseNightly(roomPrice);
   const withholdAmount = withholdNights * nightlyBase;

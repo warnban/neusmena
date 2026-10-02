@@ -89,7 +89,7 @@ describe("validatePaymentDiscount", () => {
     if (res.ok) expect(res.expectedAmount).toBe(2000);
   });
 
-  it("без правил: ошибка при расхождении суммы", () => {
+  it("без правил: своя сумма принимается и не записывается как скидка", () => {
     const res = validatePaymentDiscount({
       rules: [],
       hotelId: "h1",
@@ -97,8 +97,14 @@ describe("validatePaymentDiscount", () => {
       paymentNights: 2,
       paymentMethod: "cash",
       amount: 1500,
+      discountPercent: 10,
     });
-    expect(res.ok).toBe(false);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.expectedAmount).toBe(1500);
+      expect(res.discountPercent).toBe(0);
+      expect(res.rule).toBeNull();
+    }
   });
 
   it("с правилами: полная цена без выбора скидки — ок", () => {
@@ -128,7 +134,11 @@ describe("validatePaymentDiscount", () => {
       paymentMethod: "cash",
       amount: 1800,
     });
-    expect(withoutId.ok).toBe(false);
+    expect(withoutId.ok).toBe(true);
+    if (withoutId.ok) {
+      expect(withoutId.expectedAmount).toBe(1800);
+      expect(withoutId.rule).toBeNull();
+    }
 
     const withId = validatePaymentDiscount({
       rules,

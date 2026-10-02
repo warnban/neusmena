@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { calcStayAmount } from "@/lib/booking-pricing";
-import { stayExtrasTotal } from "@/lib/stay-extras";
+import { bookingStayNights, prepaidNights } from "@/lib/booking-payment-due";
+import { contractAfterStayNightDelta, unpaidNightTariff } from "@/lib/stay-contract";
 import { assertHotelWrite } from "@/lib/permissions";
 import { mskDateKey, mskDayAfter, mskNightDiff, parseMskDateKey } from "@/lib/msk-time";
 import { apiErrorMessage } from "@/lib/api-error";
@@ -94,16 +94,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const newCheckOut = parseMskDateKey(newCheckOutKey);
-    const newAmount = calcStayAmount({
-      roomPrice: booking.room.price,
-      checkIn: booking.checkIn,
-      checkOut: newCheckOut,
-      discountPercent: booking.discountPercent,
-      discountPerNight: booking.discountPerNight,
-      extras: stayExtrasTotal(booking),
+    const extendTx = await prisma.transaction.findMany({
+      where: { bookingId: booking.id, category: "accommodation", cancelledAt: null },
     });
-
     const nightDelta = mskNightDiff(booking.checkIn, newCheckOutKey) - mskNightDiff(booking.checkIn, prevCheckOutKey);
+    const extendTariff = unpaidNightTariff({
+      amount: booking.amount,
+      paid: booking.paid,
+      stayNights: bookingStayNights(booking),
+      prepaidNights: prepaidNights(booking, undefined, extendTx),
+      fallbackTariff: Math.max(0, booking.room.price),
+    });
+    const newAmount = contractAfterStayNightDelta(booking.amount, nightDelta, extendTariff);
     const amountDelta = newAmount - booking.amount;
 
     const [updated, stayAmendment] = await prisma.$transaction([

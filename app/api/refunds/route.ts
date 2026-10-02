@@ -14,6 +14,8 @@ import {
 import { apiErrorMessage } from "@/lib/api-error";
 import { fileServeUrl } from "@/lib/file-url";
 import { buildAccommodationRefundNote } from "@/lib/booking-transaction-notes";
+import { bookingStayNights, prepaidNights } from "@/lib/booking-payment-due";
+import { contractAfterReopeningNights, unpaidNightTariff } from "@/lib/stay-contract";
 
 export async function GET(req: NextRequest) {
   try {
@@ -125,13 +127,25 @@ export async function POST(req: NextRequest) {
       refundNote = `${refundNote}. Удержание ${withholdNights} ноч.`;
     }
 
+    const refundTariff = unpaidNightTariff({
+      amount: ctx.booking.amount,
+      paid: ctx.booking.paid,
+      stayNights: bookingStayNights(ctx.booking),
+      prepaidNights: prepaidNights(ctx.booking, undefined, ctx.transactions, ctx.refundNightsTotal),
+      fallbackTariff: Math.max(0, ctx.roomPrice),
+    });
+    const reopenedAmount = contractAfterReopeningNights({
+      amount: ctx.booking.amount,
+      releasedAmount: amount,
+      nights,
+      tariffPerNight: refundTariff,
+    });
+
     const result = await prisma.$transaction(async (tx) => {
-      // Optimistic decrement: списываем ровно `amount` из paid ТОЛЬКО если
-      // текущее paid >= amount. Если параллельный refund уже снял часть суммы,
-      // updateMany вернёт count=0 и мы откатим транзакцию через throw.
+      // Оптимистичная блокировка: параллельный возврат не должен перезаписать договор.
       const dec = await tx.booking.updateMany({
-        where: { id: ctx.booking.id, paid: { gte: amount } },
-        data: { paid: { decrement: amount } },
+        where: { id: ctx.booking.id, paid: { gte: amount }, amount: ctx.booking.amount },
+        data: { paid: { decrement: amount }, amount: reopenedAmount },
       });
       if (dec.count !== 1) {
         throw new Error("REFUND_CONFLICT");

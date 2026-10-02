@@ -125,11 +125,17 @@ export function validatePaymentDiscount(params: {
   discountPercent: number;
   discountPerNight: number;
 } | { ok: false; error: string } {
+  const submitted = Math.round(params.amount);
+  if (!submitted || submitted <= 0) {
+    return { ok: false, error: "Некорректная сумма" };
+  }
+  if (submitted > 10_000_000) {
+    return { ok: false, error: "Слишком большая сумма" };
+  }
+
   const hotelRules = activeRulesForHotel(params.rules, params.hotelId);
 
   if (hotelRules.length > 0) {
-    const fullAmount = calcPaymentWithRule(params.roomPrice, params.paymentNights, null);
-
     if (params.discountRuleId) {
       const chosen = hotelRules.find((r) => r.id === params.discountRuleId);
       if (!chosen) {
@@ -142,29 +148,22 @@ export function validatePaymentDiscount(params: {
       if (unmet) {
         return { ok: false, error: `Условия скидки не выполнены: ${unmet}` };
       }
-      const expectedAmount = calcPaymentWithRule(params.roomPrice, params.paymentNights, chosen);
-      if (Math.abs(params.amount - expectedAmount) > 1) {
-        return { ok: false, error: "Сумма не совпадает с тарифом и скидкой" };
+      const ruleAmount = calcPaymentWithRule(params.roomPrice, params.paymentNights, chosen);
+      if (Math.abs(submitted - ruleAmount) <= 1) {
+        return {
+          ok: true,
+          rule: chosen,
+          expectedAmount: ruleAmount,
+          discountPercent: chosen.discountPercent,
+          discountPerNight: chosen.discountPerNight,
+        };
       }
-      return {
-        ok: true,
-        rule: chosen,
-        expectedAmount,
-        discountPercent: chosen.discountPercent,
-        discountPerNight: chosen.discountPerNight,
-      };
     }
 
-    if (Math.abs(params.amount - fullAmount) > 1) {
-      return { ok: false, error: "Сумма не совпадает с тарифом" };
-    }
-    if ((params.discountPercent ?? 0) > 0 || (params.discountPerNight ?? 0) > 0) {
-      return { ok: false, error: "Выберите скидку из правил отеля" };
-    }
     return {
       ok: true,
       rule: null,
-      expectedAmount: fullAmount,
+      expectedAmount: submitted,
       discountPercent: 0,
       discountPerNight: 0,
     };
@@ -172,9 +171,9 @@ export function validatePaymentDiscount(params: {
 
   const pct = Math.max(0, Math.min(100, Math.round(params.discountPercent ?? 0)));
   const perNight = Math.max(0, Math.round(params.discountPerNight ?? 0));
-  const expectedAmount = calcNightPaymentTotal(params.roomPrice, params.paymentNights, pct, perNight);
-  if (Math.abs(params.amount - expectedAmount) > 1) {
-    return { ok: false, error: "Сумма не совпадает с тарифом за выбранный период" };
+  const priced = calcNightPaymentTotal(params.roomPrice, params.paymentNights, pct, perNight);
+  if (Math.abs(submitted - priced) <= 1) {
+    return { ok: true, rule: null, expectedAmount: priced, discountPercent: pct, discountPerNight: perNight };
   }
-  return { ok: true, rule: null, expectedAmount, discountPercent: pct, discountPerNight: perNight };
+  return { ok: true, rule: null, expectedAmount: submitted, discountPercent: 0, discountPerNight: 0 };
 }

@@ -2,6 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { bookingStayNights, prepaidNights } from "@/lib/booking-payment-due";
+import { contractAfterReopeningNights, unpaidNightTariff } from "@/lib/stay-contract";
 
 const ACCOMMODATION = "accommodation";
 
@@ -32,16 +34,85 @@ export async function cancelTransaction(
   try {
     await prisma.$transaction(async (db) => {
       if (tx.type === "payment" && tx.category === ACCOMMODATION && tx.bookingId && booking) {
+        const stay = await db.booking.findUnique({
+          where: { id: tx.bookingId },
+          include: { room: true },
+        });
+        const txs = await db.transaction.findMany({
+          where: { bookingId: tx.bookingId, category: ACCOMMODATION, cancelledAt: null },
+        });
+        const nights = Math.max(0, tx.paymentNights ?? 0);
+        const tariff = stay
+          ? unpaidNightTariff({
+              amount: stay.amount,
+              paid: stay.paid,
+              stayNights: bookingStayNights(stay),
+              prepaidNights: prepaidNights(stay, undefined, txs),
+              fallbackTariff: Math.max(0, stay.room?.price ?? 0),
+            })
+          : 0;
+        const othersInGroup =
+          tx.paymentGroupId && nights > 0
+            ? txs.filter(
+                (row) =>
+                  row.id !== tx.id &&
+                  row.type === "payment" &&
+                  !row.stayExtra &&
+                  row.paymentGroupId === tx.paymentGroupId &&
+                  (row.paymentNights ?? 0) > 0
+              ).length
+            : 0;
+        const reopen = !tx.stayExtra && nights > 0 && othersInGroup === 0;
+        const nextAmount = stay
+          ? tx.stayExtra
+            ? Math.max(0, stay.amount - tx.amount)
+            : reopen
+              ? contractAfterReopeningNights({
+                  amount: stay.amount,
+                  releasedAmount: tx.amount,
+                  nights,
+                  tariffPerNight: tariff,
+                })
+              : Math.max(0, stay.amount - tx.amount)
+          : booking.amount;
         await db.booking.update({
           where: { id: tx.bookingId },
-          data: { paid: Math.max(0, booking.paid - tx.amount) },
+          data: {
+            paid: Math.max(0, booking.paid - tx.amount),
+            amount: nextAmount,
+          },
         });
       }
 
       if (tx.type === "refund" && tx.bookingId && booking) {
+        const stay = await db.booking.findUnique({
+          where: { id: tx.bookingId },
+          include: { room: true },
+        });
+        const txs = stay
+          ? await db.transaction.findMany({
+              where: { bookingId: stay.id, category: ACCOMMODATION, cancelledAt: null },
+            })
+          : [];
+        const nights = Math.max(0, tx.paymentNights ?? 0);
+        const tariff = stay
+          ? unpaidNightTariff({
+              amount: stay.amount,
+              paid: stay.paid,
+              stayNights: bookingStayNights(stay),
+              prepaidNights: prepaidNights(stay, undefined, txs),
+              fallbackTariff: Math.max(0, stay.room?.price ?? 0),
+            })
+          : 0;
+        const restoredAmount = stay
+          ? Math.max(0, stay.amount + tx.amount - nights * tariff)
+          : booking.amount;
         await db.booking.update({
           where: { id: tx.bookingId },
-          data: { paid: Math.min(booking.amount, booking.paid + tx.amount) },
+          data: {
+            paid: Math.min(restoredAmount, booking.paid + tx.amount),
+            amount: restoredAmount,
+          },
         });
         if (refundRecord) {
           await db.refundRecord.delete({ where: { id: refundRecord.id } });

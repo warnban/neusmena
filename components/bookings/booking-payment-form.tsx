@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CreditCard, Tag } from "lucide-react";
 import { useApp } from "@/components/providers/app-data";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -30,6 +30,7 @@ import {
   ruleUnmetReason,
 } from "@/lib/hotel-discount-rules";
 import type { Booking, Transaction } from "@/lib/types";
+import { contractAfterNightPayment, unpaidNightTariff } from "@/lib/stay-contract";
 import {
   STAY_EXTRAS,
   STAY_EXTRA_CODES,
@@ -95,12 +96,18 @@ export function BookingPaymentForm({
   const [operationDate, setOperationDate] = useState(() => mskDateKey());
   const [extrasSel, setExtrasSel] = useState<StayExtraCode[]>([]);
   const [error, setError] = useState("");
+  const [amountDraft, setAmountDraft] = useState("");
+  const [amountManual, setAmountManual] = useState(false);
+  /** Своя цена одной ночи. null — сумма следует за тарифом и скидкой. */
+  const manualNightly = useRef<number | null>(null);
 
   useEffect(() => {
     if (!useRules) {
       setDiscountPercent(String(booking.discountPercent ?? 0));
       setDiscountPerNight(String(booking.discountPerNight ?? 0));
     }
+    manualNightly.current = null;
+    setAmountManual(false);
   }, [booking.id, booking.discountPercent, booking.discountPerNight, booking.paid, booking.amount, useRules]);
 
   const pct = Math.max(0, Math.min(100, Math.round(Number(discountPercent) || 0)));
@@ -204,10 +211,34 @@ export function BookingPaymentForm({
           ? selectedNights * roomPrice
           : calcPaymentWithRule(roomPrice, selectedNights, appliedRule)
         : selectedNights * paymentNightly;
-  const totalToPay = paymentAmount + extrasSum;
 
-  // Сумма для смежной оплаты всегда без правило-скидки (полный тариф).
-  const splitTarget = selectedNights * (useRules ? roomPrice : paymentNightly) + extrasSum;
+  useEffect(() => {
+    if (manualNightly.current == null) {
+      setAmountDraft(selectedNights > 0 ? String(paymentAmount) : "0");
+      return;
+    }
+    if (selectedNights > 0) setAmountDraft(String(manualNightly.current * selectedNights));
+  }, [paymentAmount, selectedNights, booking.id]);
+
+  const nightsAmount = selectedNights <= 0 ? 0 : Math.max(0, Math.round(Number(amountDraft) || 0));
+  const totalToPay = nightsAmount + extrasSum;
+  const splitTarget = totalToPay;
+  const openTariff = unpaidNightTariff({
+    amount: contractAmount,
+    paid: effectivePaid,
+    stayNights,
+    prepaidNights: prepaid,
+    fallbackTariff: roomPrice,
+  });
+  const nextContract = contractAfterNightPayment({
+    amount: contractAmount,
+    nights: selectedNights,
+    nightsAmount,
+    tariffPerNight: openTariff,
+    extrasAmount: extrasSum,
+  });
+  const nextDue = Math.max(0, nextContract - (effectivePaid + totalToPay));
+  const priceIsCustom = amountManual && selectedNights > 0 && Math.abs(nightsAmount - paymentAmount) > 1;
 
   const contractDebt = Math.max(0, contractAmount + extrasSum - effectivePaid);
 
@@ -243,7 +274,7 @@ export function BookingPaymentForm({
       return;
     }
     const ok = await onSubmit({
-      amount: paymentAmount,
+      amount: nightsAmount,
       nights: selectedNights,
       paidThroughDate: selectedNights > 0 ? selectedPaidThrough : "",
       extras: extrasSel.length ? extrasSel : undefined,
@@ -253,7 +284,8 @@ export function BookingPaymentForm({
       channelId: !isSplit && method === OTA_PAYMENT_CODE ? channelId : undefined,
       discountPercent: useRules ? 0 : pct,
       discountPerNight: useRules ? 0 : perNight,
-      discountRuleId: isSplit || !appliedRule ? undefined : appliedRule.id,
+      discountRuleId:
+        isSplit || !appliedRule || Math.abs(nightsAmount - paymentAmount) > 1 ? undefined : appliedRule.id,
       operationDate: canManageSettings ? operationDate : undefined,
     });
     if (!ok) setError("Не удалось принять платёж");
@@ -506,25 +538,61 @@ export function BookingPaymentForm({
               max={maxPaidThroughKey}
               className="w-full"
             />
-            <p className="text-[10px] text-muted-foreground mt-1">{selectedNights} ноч. · {money(paymentAmount)}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">{selectedNights} ноч. · {money(nightsAmount)}</p>
           </div>
         )}
       </div>
       )}
 
-      <div className="rounded-xl p-4 border-2 border-primary/30 bg-primary/5 flex justify-between items-center">
-        <div>
-          <div className="text-[11px] font-bold text-muted-foreground uppercase">К оплате</div>
-          {selectedNights > 0 && (
-            <div className="text-[10px] text-muted-foreground">{selectedNights} ноч. × {money(paymentNightly)}</div>
-          )}
-          {extrasSel.map((code) => (
-            <div key={code} className="text-[10px] text-muted-foreground">
-              + {STAY_EXTRAS[code].label.toLowerCase()} {money(extraFee)}
-            </div>
-          ))}
+      <div className="rounded-xl p-3 border-2 border-primary/30 bg-primary/5 space-y-2">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <label htmlFor="pay-amount" className="text-[11px] font-bold text-muted-foreground uppercase">Сумма за ночи</label>
+            {selectedNights > 0 && (
+              <div className="text-[10px] text-muted-foreground">
+                {selectedNights} ноч. · тариф {money(openTariff)}/сут
+              </div>
+            )}
+            {extrasSel.map((code) => (
+              <div key={code} className="text-[10px] text-muted-foreground">
+                + {STAY_EXTRAS[code].label.toLowerCase()} {money(extraFee)}
+              </div>
+            ))}
+          </div>
+          <input
+            id="pay-amount"
+            inputMode="numeric"
+            value={amountDraft}
+            disabled={selectedNights <= 0}
+            onChange={(e) => {
+              const raw = e.target.value.replace(/[^\d]/g, "");
+              setAmountDraft(raw);
+              const next = Math.round(Number(raw) || 0);
+              manualNightly.current = selectedNights > 0 ? Math.round(next / selectedNights) : null;
+              setAmountManual(true);
+            }}
+            className="w-36 px-3 py-2 text-right text-[22px] font-black text-primary rounded-xl border border-primary/30 bg-background outline-none focus:ring-2 focus:ring-ring"
+          />
         </div>
-        <div className="text-[22px] font-black text-primary">{money(totalToPay)}</div>
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="text-muted-foreground">
+            {priceIsCustom ? `Своя цена · после оплаты к оплате ${money(nextDue)}` : `После оплаты к оплате ${money(nextDue)}`}
+            {extrasSum > 0 ? ` · всего сейчас ${money(totalToPay)}` : ""}
+          </span>
+          {priceIsCustom && (
+            <button
+              type="button"
+              className="font-semibold text-primary shrink-0"
+              onClick={() => {
+                manualNightly.current = null;
+                setAmountManual(false);
+                setAmountDraft(selectedNights > 0 ? String(paymentAmount) : "0");
+              }}
+            >
+              По расчёту
+            </button>
+          )}
+        </div>
       </div>
 
       <div>

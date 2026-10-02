@@ -25,13 +25,25 @@ function nightsInAmount(amount: number, nightly: number): number {
 export function buildAccommodationPaymentNote(
   booking: BookingLike,
   amount: number,
-  options?: { paidBefore?: number; extra?: string | null; userNote?: string | null }
+  options?: {
+    paidBefore?: number;
+    extra?: string | null;
+    userNote?: string | null;
+    /** Если переданы, период берётся по числу ночей, а не по сумме ÷ тариф. */
+    nights?: number;
+    prepaidNights?: number;
+  }
 ): string {
   const paidBefore = options?.paidBefore ?? booking.paid;
   const nightly = bookingNightlyRate({ ...booking, paid: paidBefore } as Booking);
   const totalNights = bookingStayNights(booking as Booking);
-  const count = nightsInAmount(amount, nightly);
-  const startNight = nightly > 0 ? Math.floor(paidBefore / nightly) + 1 : 1;
+  const count = options?.nights && options.nights > 0 ? options.nights : nightsInAmount(amount, nightly);
+  const startNight =
+    options?.nights && options.nights > 0
+      ? Math.max(1, (options.prepaidNights ?? 0) + 1)
+      : nightly > 0
+        ? Math.floor(paidBefore / nightly) + 1
+        : 1;
   const endNight = Math.min(startNight + count - 1, totalNights);
   const period = formatStayNightPeriod(booking.checkIn, startNight, endNight);
 

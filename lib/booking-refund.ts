@@ -12,7 +12,7 @@ import { computeRefundQuote, type AccommodationPaymentSlice } from "@/lib/refund
 import type { Booking } from "@/lib/types";
 
 export function refundableNights(
-  booking: Booking,
+  booking: Parameters<typeof prepaidNights>[0],
   dateKey?: string,
   transactions?: Parameters<typeof prepaidNights>[2],
   refundNights?: number
@@ -27,7 +27,7 @@ export function refundAmountForNights(booking: Booking, nights: number): number 
 }
 
 export function canRefundBooking(
-  booking: Booking,
+  booking: Parameters<typeof prepaidNights>[0] & { status: string },
   dateKey?: string,
   transactions?: Parameters<typeof prepaidNights>[2],
   refundNights?: number

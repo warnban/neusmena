@@ -4,8 +4,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { SessionPayload } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
-import { calcStayAmount } from "@/lib/booking-pricing";
-import { stayExtrasTotal, type StayExtraCode } from "@/lib/stay-extras";
+import { type StayExtraCode } from "@/lib/stay-extras";
+import { contractAfterNightPayment, unpaidNightTariff } from "@/lib/stay-contract";
 import {
   allocateStayExtrasFromSplits,
   resolveRequestedStayExtras,
@@ -32,15 +32,15 @@ import {
   sumSplitParts,
 } from "@/lib/payment-split";
 import {
-  bookingNightlyRate,
   bookingStayNights,
   firstUnpaidNightDateKey,
   isValidPaidThrough,
   nightsFromFirstUnpaidToPaidThrough,
   paidThroughAfterNights,
   paidThroughNote,
+  prepaidNights,
 } from "@/lib/booking-payment-due";
-import { mskAddDays, mskDateKey, mskNightDiff } from "@/lib/msk-time";
+import { mskDateKey, mskNightDiff } from "@/lib/msk-time";
 import { setBedStatus } from "@/lib/dorm.server";
 import type { CheckInPayload } from "@/lib/assistant/types";
 
@@ -89,24 +89,20 @@ export async function performCheckIn(
     where: { bookingId: booking.id, category: "accommodation", cancelledAt: null },
   });
 
-  const pricingBooking = {
-    ...booking,
-    amount: calcStayAmount({
-      roomPrice: booking.room.price,
-      checkIn: booking.checkIn,
-      checkOut: booking.checkOut,
-      discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
-      discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
-      extras: stayExtrasTotal(booking),
-    }),
-  };
-
-  const firstUnpaidKey = firstUnpaidNightDateKey(pricingBooking, undefined, existingTx);
+  const firstUnpaidKey = firstUnpaidNightDateKey(booking, undefined, existingTx);
   const checkOutKey = mskDateKey(booking.checkOut);
+  const prepaid = prepaidNights(booking, undefined, existingTx);
+  const tariffPerNight = unpaidNightTariff({
+    amount: booking.amount,
+    paid: booking.paid,
+    stayNights,
+    prepaidNights: prepaid,
+    fallbackTariff: Math.max(0, booking.room.price),
+  });
 
   const extras = input.skipPayment
     ? { items: [], sum: 0, bookingData: {} }
-    : resolveRequestedStayExtras(booking, input.stayExtras, bookingNightlyRate(pricingBooking));
+    : resolveRequestedStayExtras(booking, input.stayExtras, tariffPerNight);
   if ("error" in extras && extras.error) return { ok: false, error: extras.error };
 
   const paidThroughRaw = input.paidThroughDate ? String(input.paidThroughDate).slice(0, 10) : "";
@@ -130,24 +126,15 @@ export async function performCheckIn(
     return { ok: false, error: "Слишком много ночей для оплаты" };
   }
 
-  const finalAmount = calcStayAmount({
-    roomPrice: booking.room.price,
-    checkIn: booking.checkIn,
-    checkOut: booking.checkOut,
-    discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
-    discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
-    extras: stayExtrasTotal(booking) + extras.sum,
-  });
-
-  const debt = Math.max(0, finalAmount - booking.paid);
-  if (!input.skipPayment && !extrasOnly && debt > 0 && paymentAmount <= 0) {
+  if (!input.skipPayment && !extrasOnly && paymentAmount <= 0) {
     return { ok: false, error: "Укажите сумму оплаты" };
   }
 
   const splits = sanitizeSplitParts(input.paymentSplits);
   const useSplit = !input.skipPayment && isSplitPayment(splits);
 
-  let payNow = input.skipPayment ? 0 : Math.min(debt, paymentAmount);
+  let nightsAmount = 0;
+  let payNow = 0;
   let appliedRuleId: string | null = null;
   let appliedPct = 0;
   let appliedPerNight = 0;
@@ -158,26 +145,25 @@ export async function performCheckIn(
     if (total <= 0) {
       return { ok: false, error: "Укажите суммы смежной оплаты" };
     }
-    if (total > debt + 1) {
-      return { ok: false, error: "Сумма оплаты превышает задолженность" };
+    if (total > 10_000_000) {
+      return { ok: false, error: "Слишком большая сумма" };
     }
-    // При смежной оплате правило-скидка не применяется.
+    if (extras.sum > total) {
+      return { ok: false, error: "Сумма оплаты меньше доплат" };
+    }
+    nightsAmount = Math.max(0, total - extras.sum);
     payNow = total;
-    appliedPct = useRules ? 0 : discountPercent;
-    appliedPerNight = useRules ? 0 : discountPerNight;
     paymentGroupId = newPaymentGroupId();
   } else if (extrasOnly) {
     payNow = extras.sum;
-    appliedPct = useRules ? 0 : discountPercent;
-    appliedPerNight = useRules ? 0 : discountPerNight;
-  } else if (payNow > 0) {
+  } else if (!input.skipPayment && paymentAmount > 0) {
     const validation = validatePaymentDiscount({
       rules: discountRules,
       hotelId: booking.hotelId,
-      roomPrice: booking.room.price,
+      roomPrice: tariffPerNight,
       paymentNights,
       paymentMethod,
-      amount: payNow,
+      amount: paymentAmount,
       discountRuleId: input.discountRuleId ?? null,
       discountPercent: useRules ? 0 : discountPercent,
       discountPerNight: useRules ? 0 : discountPerNight,
@@ -185,11 +171,22 @@ export async function performCheckIn(
     if (!validation.ok) {
       return { ok: false, error: validation.error };
     }
-    payNow = validation.expectedAmount + extras.sum;
+    nightsAmount = validation.expectedAmount;
+    payNow = nightsAmount + extras.sum;
     appliedRuleId = validation.rule?.id ?? null;
     appliedPct = validation.discountPercent;
     appliedPerNight = validation.discountPerNight;
   }
+
+  const nextAmount = input.skipPayment
+    ? booking.amount
+    : contractAfterNightPayment({
+        amount: booking.amount,
+        nights: extrasOnly || input.skipPayment ? 0 : paymentNights,
+        nightsAmount,
+        tariffPerNight,
+        extrasAmount: extras.sum,
+      });
 
   const now = new Date();
   const submittedAt = `${String(now.getDate()).padStart(2, "0")}.${String(now.getMonth() + 1).padStart(2, "0")}.${now.getFullYear()}`;
@@ -245,16 +242,13 @@ export async function performCheckIn(
   const appliedRule = appliedRuleId ? discountRules.find((r) => r.id === appliedRuleId) : null;
   const noteDiscount = appliedRule
     ? `Скидка: ${formatRuleLabel(appliedRule)}`
-    : !useRules && (appliedPct || appliedPerNight)
-      ? "Заселение со скидкой"
-      : null;
+    : nightsAmount > 0 && nightsAmount !== paymentNights * tariffPerNight
+      ? `Своя цена ${nightsAmount} ₽`
+      : !useRules && (appliedPct || appliedPerNight)
+        ? "Заселение со скидкой"
+        : null;
 
-  const bookingForNote = {
-    ...booking,
-    amount: finalAmount,
-    discountPercent: useRules ? booking.discountPercent ?? 0 : appliedPct,
-    discountPerNight: useRules ? booking.discountPerNight ?? 0 : appliedPerNight,
-  };
+  const bookingForNote = { ...booking };
 
   const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.guest.update({
@@ -276,9 +270,7 @@ export async function performCheckIn(
       data: {
         status: "checkedin",
         guestName: resolvedGuestName,
-        amount: finalAmount,
-        discountPercent: useRules ? booking.discountPercent ?? 0 : discountPercent,
-        discountPerNight: useRules ? booking.discountPerNight ?? 0 : discountPerNight,
+        amount: nextAmount,
         ...(payNow > 0 ? { paid: { increment: payNow } } : {}),
         ...(channelId ? { channelId } : {}),
         ...extras.bookingData,
@@ -324,8 +316,10 @@ export async function performCheckIn(
     for (const p of extraParts) {
       ops.push(extraTx(p.code, p.method, p.amount, { paymentGroupId }));
     }
-    const baseNote = buildAccommodationPaymentNote(bookingForNote, payNow - extras.sum, {
+    const baseNote = buildAccommodationPaymentNote(bookingForNote, nightsAmount, {
       paidBefore: booking.paid,
+      nights: paymentNights,
+      prepaidNights: prepaid,
       extra: [paidThroughNote(paidThroughDate), noteDiscount].filter(Boolean).join(". "),
       userNote: input.note ?? null,
     });
@@ -377,6 +371,8 @@ export async function performCheckIn(
           discountPerNightApplied: appliedPerNight,
           note: buildAccommodationPaymentNote(bookingForNote, nightsAmount, {
             paidBefore: booking.paid,
+            nights: paymentNights,
+            prepaidNights: prepaid,
             extra: [paidThroughNote(paidThroughDate), noteDiscount].filter(Boolean).join(". "),
             userNote: input.note ?? null,
           }),
@@ -391,7 +387,7 @@ export async function performCheckIn(
     await setBedStatus(booking.bedId, "occupied");
   }
 
-  return { ok: true, amount: finalAmount, paid: booking.paid + payNow, guestId: guest.id };
+  return { ok: true, amount: nextAmount, paid: booking.paid + payNow, guestId: guest.id };
 }
 
 export function formFromScanAndGuest(
