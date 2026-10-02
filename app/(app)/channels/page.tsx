@@ -10,7 +10,8 @@ import { Select } from "@/components/ui/select";
 import { money, fmtDateRu, startOfDay } from "@/lib/format";
 import { useApp } from "@/components/providers/app-data";
 import { otaDisplayStatus, OTA_STATUS_LABELS, isOtaBooking } from "@/lib/ota";
-import { buildOtaCheckoutReport, printOtaReport } from "@/lib/ota-report";
+import { buildOtaPaymentReport, printOtaReport } from "@/lib/ota-report";
+import { OTA_PAYMENT_CODE } from "@/lib/finance";
 import type { Booking } from "@/lib/types";
 
 function defaultRange() {
@@ -21,7 +22,7 @@ function defaultRange() {
 }
 
 export default function ChannelsPage() {
-  const { channels, bookings, hotels, hotelId, loading, refresh, canManageSettings } = useApp();
+  const { channels, bookings, transactions, hotels, hotelId, loading, refresh, canManageSettings } = useApp();
   const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -64,8 +65,19 @@ export default function ChannelsPage() {
 
   const reportSections = useMemo(() => {
     if (!activeHotel || !showReport) return [];
-    return buildOtaCheckoutReport(bookings, channels, activeHotel.id, dateFrom, dateTo);
-  }, [bookings, channels, activeHotel, dateFrom, dateTo, showReport]);
+    return buildOtaPaymentReport(transactions, bookings, channels, activeHotel.id, dateFrom, dateTo);
+  }, [transactions, bookings, channels, activeHotel, dateFrom, dateTo, showReport]);
+
+  const otaPayments = useMemo(() => {
+    if (!activeHotel) return [];
+    return transactions
+      .filter((t) => {
+        if (t.hotelId !== activeHotel.id || t.paymentMethod !== OTA_PAYMENT_CODE || t.cancelledAt) return false;
+        const d = new Date(t.date);
+        return d >= dateFrom && d <= dateTo;
+      })
+      .sort((a, b) => +new Date(b.date) - +new Date(a.date));
+  }, [transactions, activeHotel, dateFrom, dateTo]);
 
   const totals = useMemo(() => ({
     revenue: scopedChannels.reduce((s, c) => s + c.revenueMonth, 0),
@@ -228,6 +240,42 @@ export default function ChannelsPage() {
               {error && <p className="px-5 pb-3 text-[12px] text-destructive font-semibold">{error}</p>}
             </div>
 
+            {/* Оплаты OTA — не входят в кассовый отчёт */}
+            <div className="bg-card rounded-xl overflow-hidden border border-border">
+              <div className="px-5 py-3.5 bg-muted border-b-2 border-border">
+                <h3 className="text-[13px] font-bold text-foreground">Оплаты OTA</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  За выбранный период. В кассовый отчёт эти суммы не входят.
+                </p>
+              </div>
+              <table className="w-full">
+                <thead className="border-b border-border">
+                  <tr>
+                    {["Дата", "Канал", "Гость", "Сумма"].map((h) => (
+                      <th key={h} className="px-4 py-2.5 text-left text-[11px] font-bold text-muted-foreground uppercase">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {otaPayments.map((t) => {
+                    const ch = t.channelId ? channelById.get(t.channelId) : undefined;
+                    const signed = t.type === "refund" ? -Math.abs(t.amount) : t.amount;
+                    return (
+                      <tr key={t.id} className="hover:bg-muted/50 border-b border-border/40">
+                        <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">{fmtDateRu(new Date(t.date))}</td>
+                        <td className="px-4 py-3 text-[12px] font-semibold">{ch?.name ?? "Без канала"}</td>
+                        <td className="px-4 py-3 text-[13px] font-bold text-foreground">{t.guestName || "—"}</td>
+                        <td className={`px-4 py-3 text-[13px] font-bold ${signed < 0 ? "text-destructive" : "text-success"}`}>{money(signed)}</td>
+                      </tr>
+                    );
+                  })}
+                  {otaPayments.length === 0 && (
+                    <tr><td colSpan={4} className="px-4 py-8 text-center text-[12px] text-muted-foreground">Нет оплат OTA за выбранный период</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
             {/* Брони OTA */}
             <div className="bg-card rounded-xl overflow-hidden border border-border">
               <div className="px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 bg-muted border-b-2 border-border">
@@ -251,8 +299,8 @@ export default function ChannelsPage() {
                   <button
                     onClick={() => {
                       setShowReport(true);
-                      const sections = buildOtaCheckoutReport(bookings, channels, activeHotel.id, dateFrom, dateTo);
-                      printOtaReport(sections, activeHotel.name, dateFrom, dateTo);
+                      const sections = buildOtaPaymentReport(transactions, bookings, channels, activeHotel.id, dateFrom, dateTo);
+                      printOtaReport(sections, activeHotel.name, dateFrom, dateTo, "Оплаты OTA");
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold rounded-lg border border-primary/40 text-primary hover:bg-accent"
                   >
@@ -300,16 +348,16 @@ export default function ChannelsPage() {
             {showReport && (
               <div className="bg-card rounded-xl border border-border p-5 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[14px] font-bold text-foreground">Отчёт по выездам · {fmtDateRu(dateFrom)} — {fmtDateRu(dateTo)}</h3>
+                  <h3 className="text-[14px] font-bold text-foreground">Оплаты OTA · {fmtDateRu(dateFrom)} — {fmtDateRu(dateTo)}</h3>
                   <button
-                    onClick={() => printOtaReport(reportSections, activeHotel.name, dateFrom, dateTo)}
+                    onClick={() => printOtaReport(reportSections, activeHotel.name, dateFrom, dateTo, "Оплаты OTA")}
                     className="text-[12px] font-bold text-primary hover:underline"
                   >
                     Печать
                   </button>
                 </div>
                 {reportSections.length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground">За период нет выехавших гостей с OTA-каналов</p>
+                  <p className="text-[12px] text-muted-foreground">За период нет оплат OTA</p>
                 ) : (
                   reportSections.map((sec) => (
                     <div key={sec.channelId}>

@@ -1,6 +1,7 @@
-import type { Booking, Channel } from "@/lib/types";
+import type { Booking, Channel, Transaction } from "@/lib/types";
 import { fmtDateRu, money, startOfDay } from "@/lib/format";
 import { isOtaBooking } from "@/lib/ota";
+import { OTA_PAYMENT_CODE } from "@/lib/finance";
 
 export type OtaReportLine = {
   entryDate: Date;
@@ -86,11 +87,83 @@ export function buildOtaCheckoutReport(
   return sections;
 }
 
+function signedOtaAmount(t: Transaction): number {
+  return t.type === "refund" ? -Math.abs(t.amount) : t.amount;
+}
+
+/** Оплаты способом OTA за период, по каналу. В кассовый отчёт не входят. */
+export function buildOtaPaymentReport(
+  transactions: Transaction[],
+  bookings: Booking[],
+  channels: Channel[],
+  hotelId: string,
+  dateFrom: Date,
+  dateTo: Date
+): OtaReportSection[] {
+  const from = startOfDay(dateFrom);
+  const to = startOfDay(dateTo);
+  to.setHours(23, 59, 59, 999);
+
+  const payments = transactions.filter((t) => {
+    if (t.hotelId !== hotelId || t.paymentMethod !== OTA_PAYMENT_CODE || t.cancelledAt) return false;
+    const d = new Date(t.date);
+    return d >= from && d <= to;
+  });
+
+  const byChannel = new Map<string, OtaReportLine[]>();
+  for (const t of payments) {
+    const booking = t.bookingId ? bookings.find((b) => b.id === t.bookingId) : undefined;
+    const chId =
+      t.channelId ??
+      booking?.channelId ??
+      (booking ? channels.find((c) => c.hotelId === hotelId && c.code === booking.source)?.id : undefined) ??
+      "unknown";
+    const line: OtaReportLine = {
+      entryDate: new Date(t.date),
+      guestName: t.guestName || booking?.guestName || "—",
+      stayFrom: booking ? new Date(booking.checkIn) : new Date(t.date),
+      stayTo: booking ? new Date(booking.checkOut) : new Date(t.date),
+      amount: signedOtaAmount(t),
+    };
+    const list = byChannel.get(chId) ?? [];
+    list.push(line);
+    byChannel.set(chId, list);
+  }
+
+  const sections: OtaReportSection[] = [];
+  for (const ch of channels.filter((c) => c.hotelId === hotelId)) {
+    const lines = (byChannel.get(ch.id) ?? []).sort(
+      (a, b) => a.entryDate.getTime() - b.entryDate.getTime() || a.guestName.localeCompare(b.guestName, "ru")
+    );
+    if (!lines.length) continue;
+    sections.push({
+      channelId: ch.id,
+      channelName: ch.name,
+      color: ch.color,
+      lines,
+      total: lines.reduce((s, l) => s + l.amount, 0),
+    });
+    byChannel.delete(ch.id);
+  }
+  const unknown = byChannel.get("unknown");
+  if (unknown?.length) {
+    sections.push({
+      channelId: "unknown",
+      channelName: "Без канала",
+      color: "#64748B",
+      lines: unknown.sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime()),
+      total: unknown.reduce((s, l) => s + l.amount, 0),
+    });
+  }
+  return sections;
+}
+
 export function printOtaReport(
   sections: OtaReportSection[],
   hotelName: string,
   dateFrom: Date,
-  dateTo: Date
+  dateTo: Date,
+  title = "Отчёт по каналам OTA — выезды"
 ) {
   const period = `${fmtDateRu(dateFrom)} — ${fmtDateRu(dateTo)}`;
   const grandTotal = sections.reduce((s, sec) => s + sec.total, 0);
@@ -140,9 +213,9 @@ export function printOtaReport(
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Отчёт OTA ${period}</title></head>
 <body style="font-family:system-ui,sans-serif;padding:24px;max-width:900px;margin:0 auto">
-<h1 style="font-size:18px;margin:0 0 4px">Отчёт по каналам OTA — выезды</h1>
+<h1 style="font-size:18px;margin:0 0 4px">${title}</h1>
 <p style="margin:0 0 16px;color:#64748b;font-size:13px">${hotelName} · период ${period}</p>
-${body || "<p>Нет выехавших гостей за период</p>"}
+${body || "<p>Нет операций за период</p>"}
 <div style="margin-top:24px;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:14px">
 <strong>Общая сумма выручки:</strong> ${money(grandTotal)}
 </div>

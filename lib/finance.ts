@@ -10,35 +10,27 @@ function sameDay(a: Date, b: Date): boolean {
   return a.toDateString() === b.toDateString();
 }
 
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-/** OTA-оплата за проживание учитывается в отчётах только после выезда. */
 export function isTransactionCancelled(t: Pick<Transaction, "cancelledAt">): boolean {
   return Boolean(t.cancelledAt);
 }
 
+/** Оплата способом OTA. В кассовые и финансовые отчёты не входит — только менеджер каналов. */
+export function isOtaPayment(t: Pick<Transaction, "paymentMethod">): boolean {
+  return t.paymentMethod === OTA_PAYMENT_CODE;
+}
+
 export function isOtaAccommodation(t: Transaction): boolean {
-  return t.paymentMethod === OTA_PAYMENT_CODE && t.category === ACCOMMODATION;
+  return isOtaPayment(t) && t.category === ACCOMMODATION;
 }
 
-export function isTransactionRecognized(t: Transaction, bookings: Booking[]): boolean {
+export function isTransactionRecognized(t: Transaction, _bookings: Booking[]): boolean {
   if (isTransactionCancelled(t)) return false;
-  if (!isOtaAccommodation(t) || !t.bookingId) return true;
-  const b = bookings.find((x) => x.id === t.bookingId);
-  return b?.status === "checkedout";
+  if (isOtaPayment(t)) return false;
+  return true;
 }
 
-/** Дата учёта в финансовых отчётах (для OTA проживания — дата выезда). */
-export function transactionReportDate(t: Transaction, bookings: Booking[]): Date {
-  if (isOtaAccommodation(t) && t.bookingId) {
-    const b = bookings.find((x) => x.id === t.bookingId);
-    if (b?.checkedOutAt) return new Date(b.checkedOutAt);
-    if (b?.checkOut) return startOfDay(new Date(b.checkOut));
-  }
+/** Дата учёта в финансовых отчётах. */
+export function transactionReportDate(t: Transaction, _bookings: Booking[]): Date {
   return t.date;
 }
 

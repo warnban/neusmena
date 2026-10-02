@@ -307,7 +307,7 @@ export function DailyReportPanel({
           <div className="rounded-lg border border-border bg-accent px-4 py-3 text-[12px]">
             <p className="font-semibold text-accent-foreground">Закрытие отчёта за сегодня</p>
             <p className="text-muted-foreground mt-0.5">
-              В отчёт войдут операции, признанные на сегодня (включая OTA после выезда). После закрытия до 00:01 МСК
+              В отчёт войдут операции за сегодня, кроме оплат OTA — они только в менеджере каналов. После закрытия до 00:01 МСК
               нельзя проводить оплаты, услуги, расходы, инкассацию и зарплаты.
             </p>
           </div>
