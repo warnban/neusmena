@@ -125,7 +125,7 @@ export interface Booking {
   hotelId: string;
   roomId: string;
   bedId?: string | null;
-  guestId: string;
+  guestId: string | null;
   guestName: string;
   checkIn: Date;
   checkOut: Date;
