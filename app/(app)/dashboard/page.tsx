@@ -25,7 +25,7 @@ import {
   paymentSoonInfo,
   type StayReminderKind,
 } from "@/lib/booking-payment-due";
-import { mskDayAfter, mskDateKey, parseMskDateKey } from "@/lib/msk-time";
+import { mskAddDays, mskDayAfter, mskDateKey, parseMskDateKey } from "@/lib/msk-time";
 import { isAwaitingCheckIn } from "@/lib/booking-arrivals";
 import { guestStayPlace } from "@/lib/dorm";
 import { useApp } from "@/components/providers/app-data";
@@ -268,21 +268,27 @@ export default function DashboardPage() {
   );
 
   const occChartData = useMemo(() => {
+    const todayKey = mskDateKey(TODAY);
     const capacity = Math.max(1, todayOccupancy.capacity);
-    const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-    return days.map((dname, i) => {
-      const day = new Date(TODAY);
-      day.setDate(TODAY.getDate() - (6 - i));
-      const occ = scopedBookings.filter(
-        (b) =>
-          b.checkIn <= day &&
-          b.checkOut > day &&
-          b.status !== "cancelled" &&
-          (b.status === "checkedin" || b.status === "confirmed" || b.status === "new")
-      ).length;
-      return { d: dname, v: Math.min(100, Math.round((occ / capacity) * 100)) };
+    const weekday = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+    return Array.from({ length: 7 }, (_, i) => {
+      const key = mskAddDays(todayKey, i - 6);
+      const [y, m, d] = key.split("-").map(Number);
+      const label = weekday[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+      if (key === todayKey) {
+        return { d: label, v: todayOccupancy.pct, places: `${todayOccupancy.occupied}/${todayOccupancy.capacity}` };
+      }
+      const occupied = scopedBookings.filter((b) => {
+        if (b.status !== "checkedin" && b.status !== "checkedout") return false;
+        return mskDateKey(b.checkIn) <= key && mskDateKey(b.checkOut) > key;
+      }).length;
+      return {
+        d: label,
+        v: Math.min(100, Math.round((occupied / capacity) * 100)),
+        places: `${occupied}/${capacity}`,
+      };
     });
-  }, [scopedBookings, todayOccupancy.capacity, TODAY]);
+  }, [scopedBookings, todayOccupancy, TODAY]);
 
   const modals = (
     <>
@@ -431,7 +437,12 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="2 4" vertical={false} />
                 <XAxis dataKey="d" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(v) => v + "%"} />
-                <Tooltip formatter={(v) => [String(v) + "%", "Загрузка"]} />
+                <Tooltip
+                  formatter={(v, _n, item) => [
+                    `${String(v)}% · ${String((item as { payload?: { places?: string } }).payload?.places ?? "")}`,
+                    "Загрузка",
+                  ]}
+                />
                 <Area type="monotone" dataKey="v" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#gOcc)" dot={false} activeDot={{ r: 4 }} />
               </AreaChart>
             </ResponsiveContainer>

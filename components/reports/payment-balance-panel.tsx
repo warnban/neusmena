@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { money } from "@/lib/format";
 import { balanceDelta, isExpenseType, isTransactionRecognized } from "@/lib/finance";
 import { mskAddDays, mskDateKey } from "@/lib/msk-time";
@@ -100,21 +101,24 @@ export function PaymentBalancePanel({
   }
 
   return (
-    <div className="bg-card rounded-xl p-5 border border-border space-y-4">
-      <div>
-        <h3 className="text-[13px] font-bold text-foreground">Баланс по способам оплаты</h3>
-        <p className="text-[11px] text-muted-foreground mt-1">
-          Доход плюс, расход минус. Оплаты OTA и отменённые транзакции не входят.
-        </p>
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3 max-w-xl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[13px] font-bold text-foreground">Баланс по способам оплаты</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Доход плюс, расход минус. Без OTA и отменённых.</p>
+        </div>
+        <div className={`text-[18px] font-black tabular-nums shrink-0 ${total < 0 ? "text-destructive" : "text-foreground"}`}>
+          {money(total)}
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         {QUICK.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => applyQuick(item.id)}
-            className={`px-3 py-1.5 rounded-full text-[11px] font-bold ${
+            className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
               quick === item.id ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -123,63 +127,73 @@ export function PaymentBalancePanel({
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-3 items-end">
-        <label className="block">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block min-w-0">
           <span className="text-[10px] font-bold text-muted-foreground uppercase">С</span>
-          <input
-            type="date"
+          <DatePicker
+            mode="iso"
             value={from}
-            onChange={(e) => {
-              setFrom(e.target.value);
+            onChange={(v) => {
+              setFrom(v);
               setQuick(null);
             }}
-            className="mt-1 block rounded-lg border border-border bg-background text-foreground px-2 py-1.5 text-[12px]"
+            placeholder="С"
+            className="mt-1 w-full [&_button]:w-full [&_button]:px-2.5 [&_button]:py-1.5 [&_button]:text-[12px]"
           />
         </label>
-        <label className="block">
+        <label className="block min-w-0">
           <span className="text-[10px] font-bold text-muted-foreground uppercase">По</span>
-          <input
-            type="date"
+          <DatePicker
+            mode="iso"
             value={to}
-            onChange={(e) => {
-              setTo(e.target.value);
+            onChange={(v) => {
+              setTo(v);
               setQuick(null);
             }}
-            className="mt-1 block rounded-lg border border-border bg-background text-foreground px-2 py-1.5 text-[12px]"
+            placeholder="По"
+            className="mt-1 w-full [&_button]:w-full [&_button]:px-2.5 [&_button]:py-1.5 [&_button]:text-[12px]"
           />
-        </label>
-        <label className="block">
-          <span className="text-[10px] font-bold text-muted-foreground uppercase">Тип</span>
-          <select
-            value={direction}
-            onChange={(e) => setDirection(e.target.value as Direction)}
-            className="mt-1 block rounded-lg border border-border bg-background text-foreground px-2 py-1.5 text-[12px]"
-          >
-            <option value="all">Доход и расход</option>
-            <option value="income">Только доход</option>
-            <option value="expense">Только расход</option>
-          </select>
-        </label>
-        <label className="block min-w-[180px]">
-          <span className="text-[10px] font-bold text-muted-foreground uppercase">Категория</span>
-          <select
-            value=""
-            onChange={(e) => {
-              const code = e.target.value;
-              if (!code || categories.includes(code)) return;
-              setCategories((prev) => [...prev, code]);
-            }}
-            className="mt-1 block w-full rounded-lg border border-border bg-background text-foreground px-2 py-1.5 text-[12px]"
-          >
-            <option value="">{categories.length ? "Добавить категорию" : "Все категории"}</option>
-            {categoryOptions.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.label}
-              </option>
-            ))}
-          </select>
         </label>
       </div>
+
+      <div className="flex rounded-lg border border-border overflow-hidden text-[11px] font-bold">
+        {(
+          [
+            ["all", "Все"],
+            ["income", "Доход"],
+            ["expense", "Расход"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setDirection(id)}
+            className={`flex-1 py-1.5 ${direction === id ? "bg-foreground text-background" : "bg-card text-muted-foreground hover:text-foreground"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <label className="block">
+        <span className="text-[10px] font-bold text-muted-foreground uppercase">Категории</span>
+        <select
+          value=""
+          onChange={(e) => {
+            const code = e.target.value;
+            if (!code || categories.includes(code)) return;
+            setCategories((prev) => [...prev, code]);
+          }}
+          className="mt-1 w-full rounded-lg border border-border bg-background text-foreground px-2 py-1.5 text-[12px]"
+        >
+          <option value="">{categories.length ? "Добавить категорию" : "Все категории"}</option>
+          {categoryOptions.map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {categories.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -188,47 +202,26 @@ export function PaymentBalancePanel({
               key={code}
               type="button"
               onClick={() => setCategories((prev) => prev.filter((item) => item !== code))}
-              className="px-2 py-1 rounded-full bg-accent text-[11px] font-bold text-foreground"
+              className="px-2 py-0.5 rounded-full bg-accent text-[11px] font-bold text-foreground"
             >
               {catName(code, transactionCategories)} ×
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setCategories([])}
-            className="px-2 py-1 text-[11px] font-bold text-muted-foreground hover:text-foreground"
-          >
-            Сбросить
-          </button>
         </div>
       )}
 
-      <table className="w-full text-[12px]">
-        <thead>
-          <tr className="text-[10px] font-bold text-muted-foreground uppercase border-b border-border">
-            <th className="text-left py-2">Способ</th>
-            <th className="text-right py-2">Баланс</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.code} className="border-b border-border/60">
-              <td className="py-2 font-semibold" style={{ color: row.color }}>
-                {row.label}
-              </td>
-              <td className={`py-2 text-right font-black ${row.amount < 0 ? "text-destructive" : "text-foreground"}`}>
-                {money(row.amount)}
-              </td>
-            </tr>
-          ))}
-          <tr>
-            <td className="py-2 font-black">Итого</td>
-            <td className={`py-2 text-right font-black ${total < 0 ? "text-destructive" : "text-foreground"}`}>
-              {money(total)}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="divide-y divide-border/70">
+        {rows.map((row) => (
+          <div key={row.code} className="flex items-center justify-between gap-3 py-1.5">
+            <span className="text-[12px] font-semibold truncate" style={{ color: row.color }}>
+              {row.label}
+            </span>
+            <span className={`text-[13px] font-black tabular-nums shrink-0 ${row.amount < 0 ? "text-destructive" : "text-foreground"}`}>
+              {money(row.amount)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

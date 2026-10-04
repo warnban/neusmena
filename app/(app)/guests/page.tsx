@@ -697,6 +697,22 @@ export default function GuestsPage() {
                           <div className="text-[10px] font-semibold mt-0.5" style={{ color: dc.color }}>{DOC_LABELS[doc.type] ?? doc.type}</div>
                           <div className="text-[10px] text-muted-foreground">{doc.pages} стр. · {doc.size}</div>
                         </div>
+                        <button
+                          type="button"
+                          aria-label="Удалить скан"
+                          className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={async (ev) => {
+                            ev.stopPropagation();
+                            if (!selected || !window.confirm(`Удалить скан «${doc.name}»?`)) return;
+                            const res = await fetch(`/api/guests/${selected.id}/documents/${doc.id}`, { method: "DELETE" });
+                            if (res.ok) {
+                              if (docPreview?.id === doc.id) setDocPreview(null);
+                              await refresh();
+                            }
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                         <Eye size={13} style={{ color: dc.color }} />
                       </div>
                     );

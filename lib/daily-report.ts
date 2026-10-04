@@ -11,6 +11,7 @@ import {
   transactionOnReportMskDay,
 } from "@/lib/finance";
 import { mskDateKey, parseMskDateKey, fmtMskDateTime } from "@/lib/msk-time";
+import { txCategoryLabel } from "@/lib/tx-categories";
 
 const ACCOMMODATION = "accommodation";
 const MS_DAY = 86_400_000;
@@ -19,6 +20,11 @@ export type DailyPmBreakdown = {
   code: string;
   accommodation: number;
   total: number;
+};
+
+export type DailyExpenseLine = {
+  amount: number;
+  label: string;
 };
 
 export type DailyReportData = {
@@ -35,6 +41,7 @@ export type DailyReportData = {
   cashOpening: number;
   cashClosing: number;
   byPayment: DailyPmBreakdown[];
+  expenseLines: DailyExpenseLine[];
   dayAdminName: string;
   nightAdminName: string;
 };
@@ -101,6 +108,13 @@ export function buildDailyCloseReport(
     .filter((t) => t.category === ACCOMMODATION)
     .reduce((s, t) => s + revenueAmount(t), 0);
 
+  const expenseLines: DailyExpenseLine[] = [...expenseTx, ...encashmentTx]
+    .map((t) => ({
+      amount: expenseAmount(t),
+      label: t.note?.trim() || txCategoryLabel(t.category),
+    }))
+    .filter((line) => line.amount > 0);
+
   const expenseOnlyTotal = expenseTx.reduce((s, t) => s + expenseAmount(t), 0);
   const encashmentTotal = encashmentTx.reduce((s, t) => s + expenseAmount(t), 0);
   const expensesTotal = expenseOnlyTotal + encashmentTotal;
@@ -134,6 +148,7 @@ export function buildDailyCloseReport(
     cashOpening,
     cashClosing,
     byPayment,
+    expenseLines,
     dayAdminName: shift?.dayAdminName ?? "",
     nightAdminName: shift?.nightAdminName ?? "",
   };
@@ -210,6 +225,7 @@ export function formatDailyReportText(
   > & {
     encashmentTotal?: number;
     expenseOnlyTotal?: number;
+    expenseLines?: DailyExpenseLine[];
   },
   paymentLabels: Record<string, string>,
   closedAt?: string
@@ -239,6 +255,9 @@ export function formatDailyReportText(
     "",
     `Расходы: −${money(report.expensesTotal)}`
   );
+  for (const line of report.expenseLines ?? []) {
+    lines.push(`−${money(line.amount)} (${line.label})`);
+  }
   if ((report.encashmentTotal ?? 0) > 0) {
     let detail = `в т.ч. инкассация −${money(report.encashmentTotal ?? 0)}`;
     if ((report.expenseOnlyTotal ?? 0) > 0) {

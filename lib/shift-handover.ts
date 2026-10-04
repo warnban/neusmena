@@ -48,9 +48,9 @@ export function buildShiftHandover(
     hotelBeds
   );
 
-  const unpaidGuests = filterPaymentDueBookings(hotelBookings, dateKey)
+  const unpaidGuests = filterPaymentDueBookings(hotelBookings, dateKey, hotelTx)
     .map((b) => {
-      const { debt, debtNights } = paymentDueInfo(b, dateKey);
+      const { debt, debtNights } = paymentDueInfo(b, dateKey, hotelTx);
       return {
         bookingId: b.id,
         guestName: b.guestName,

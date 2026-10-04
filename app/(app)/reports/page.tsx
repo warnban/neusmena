@@ -200,6 +200,12 @@ export default function ReportsPage() {
               <KpiCard label="RevPAR" value={money(kpis.revpar)} sub="выручка/доступный номер·день" accent="hsl(var(--primary))" />
               <KpiCard label="Выручка" value={`${(kpis.totalRevenue / 1_000_000).toFixed(2)}M ₽`} sub="6 мес." trend={kpis.revenueTrend ? `${kpis.revenueTrend > 0 ? "+" : ""}${kpis.revenueTrend}%` : undefined} trendDir={kpis.revenueTrend >= 0 ? "up" : "down"} accent="#F59E0B" />
             </div>
+            <PaymentBalancePanel
+              transactions={htxns}
+              bookings={scopedBookings}
+              pmConfig={pmConfig}
+              transactionCategories={transactionCategories}
+            />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2 bg-card rounded-xl p-5 border border-border">
                 <h3 className="text-[13px] font-bold text-foreground mb-4">Выручка и загрузка 2026</h3>
@@ -228,12 +234,6 @@ export default function ReportsPage() {
               bookings={scopedBookings}
               transactionCategories={transactionCategories}
               onCategoryClick={openTransactionsByCategory}
-            />
-            <PaymentBalancePanel
-              transactions={htxns}
-              bookings={scopedBookings}
-              pmConfig={pmConfig}
-              transactionCategories={transactionCategories}
             />
               </>
             )}

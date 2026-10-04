@@ -9,6 +9,8 @@ import { money, fmtDate } from "@/lib/format";
 import { mskDateKey, fmtMskDateTime } from "@/lib/msk-time";
 import type { DailyPmBreakdown } from "@/lib/daily-report";
 import { formatDailyReportText } from "@/lib/daily-report";
+import { useApp } from "@/components/providers/app-data";
+import { txCategoryLabel } from "@/lib/tx-categories";
 
 type HistoryItem = {
   id: string;
@@ -55,6 +57,7 @@ export function DailyReportPanel({
   canReopenReport?: boolean;
   onClosed?: () => void;
 }) {
+  const { transactions } = useApp();
   const todayKey = useMemo(() => mskDateKey(), []);
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -66,6 +69,22 @@ export function DailyReportPanel({
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [paymentLock, setPaymentLock] = useState<PaymentLock>({ locked: false, message: null, unlockAt: null });
+  const expenseLines = useMemo(
+    () =>
+      transactions
+        .filter(
+          (t) =>
+            t.hotelId === hotelId &&
+            !t.cancelledAt &&
+            (t.type === "expense" || t.type === "encashment" || t.type === "refund") &&
+            mskDateKey(t.date) === selectedDate
+        )
+        .map((t) => ({
+          amount: t.amount,
+          label: t.note?.trim() || txCategoryLabel(t.category),
+        })),
+    [transactions, hotelId, selectedDate]
+  );
 
   const loadReport = useCallback(async (date: string) => {
     setLoading(true);
@@ -163,7 +182,13 @@ export function DailyReportPanel({
 
   async function copyReport() {
     if (!report || !closed) return;
-    const text = formatDailyReportText(hotelName, selectedDate, report, paymentLabels, report.closedAt);
+    const text = formatDailyReportText(
+      hotelName,
+      selectedDate,
+      { ...report, expenseLines },
+      paymentLabels,
+      report.closedAt
+    );
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -382,6 +407,16 @@ export function DailyReportPanel({
               <section className="pt-2 border-t border-border">
                 <h4 className="text-[12px] font-bold text-muted-foreground uppercase mb-1">Расходы</h4>
                 <div className="text-[20px] font-black text-destructive">−{money(report.expensesTotal)}</div>
+                {expenseLines.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {expenseLines.map((line, i) => (
+                      <li key={`${line.label}-${i}`} className="text-[12px] text-foreground">
+                        −{money(line.amount)}
+                        {line.label ? <span className="text-muted-foreground"> ({line.label})</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {(report.encashmentTotal ?? 0) > 0 && (
                   <p className="text-[11px] text-muted-foreground mt-1">
                     в т.ч. инкассация −{money(report.encashmentTotal ?? 0)}
