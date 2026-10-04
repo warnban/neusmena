@@ -28,6 +28,9 @@ import type { Guest, GuestDocument, StayAmendment } from "@/lib/types";
 
 import { PRIMARY_DOC_LABELS, normalizeDocType, getDocTypeConfig } from "@/lib/document-types";
 import { formatDormPlaceLabel } from "@/lib/dorm";
+import { applyDocumentScanToForm } from "@/lib/document-scan-apply";
+import { guestToForm } from "@/lib/guest-form";
+import type { DocumentScanApiResponse } from "@/lib/document-scan-types";
 
 const NATIONALITY_FLAGS: Record<string, string> = {
   RU: "🇷🇺", DE: "🇩🇪", CN: "🇨🇳", AE: "🇦🇪", GB: "🇬🇧", US: "🇺🇸", FR: "🇫🇷", IT: "🇮🇹",
@@ -68,6 +71,8 @@ export default function GuestsPage() {
   const [editGuest, setEditGuest] = useState<Guest | null>(null);
   const [docPreview, setDocPreview] = useState<GuestDocument | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [pendingScan, setPendingScan] = useState<File | null>(null);
+  const [scanNote, setScanNote] = useState("");
   const [migRegGuest, setMigRegGuest] = useState<Guest | null>(null);
   const [printFormId, setPrintFormId] = useState<GuestFormId | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -215,6 +220,11 @@ export default function GuestsPage() {
       if (updated) setSelected(updated);
     }
   }, [guests, selected?.id]);
+
+  useEffect(() => {
+    setPendingScan(null);
+    setScanNote("");
+  }, [selected?.id]);
 
   if (loading) {
     return (
@@ -554,21 +564,125 @@ export default function GuestsPage() {
                     accept=".pdf,.jpg,.jpeg,.png,.webp"
                     className="hidden"
                     disabled={uploadBusy}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (!file || !selected) return;
-                      setUploadBusy(true);
-                      const fd = new FormData();
-                      fd.append("file", file);
-                      fd.append("type", "passport");
-                      await fetch(`/api/guests/${selected.id}/documents`, { method: "POST", body: fd });
-                      await refresh();
-                      setUploadBusy(false);
                       e.target.value = "";
+                      if (!file || !selected) return;
+                      setScanNote("");
+                      setPendingScan(file);
                     }}
                   />
                 </label>
               </div>
+              {pendingScan && selected && (
+                <div className="mx-4 mt-3 rounded-xl border border-primary/30 bg-accent/40 p-3 space-y-2">
+                  <p className="text-[12px] font-semibold text-foreground">
+                    {pendingScan.name}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Распознать документ и подставить данные в карточку, как при заселении, или только прикрепить файл?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={uploadBusy}
+                      onClick={() => {
+                        const file = pendingScan;
+                        const guest = selected;
+                        setUploadBusy(true);
+                        setScanNote("");
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        fd.append("type", "passport");
+                        if (hotelId !== "all") fd.append("hotelId", hotelId);
+                        void fetch(`/api/guests/${guest.id}/document-scan`, { method: "POST", body: fd })
+                          .then(async (res) => {
+                            const data = (await res.json()) as DocumentScanApiResponse & {
+                              error?: string;
+                              partial?: boolean;
+                            };
+                            if (!res.ok || !data.extract) {
+                              setScanNote(
+                                data.partial
+                                  ? `${data.error ?? "Распознавание не удалось"}. Скан прикреплён, поля не изменены.`
+                                  : data.error ?? "Не удалось распознать"
+                              );
+                              if (data.partial) {
+                                setPendingScan(null);
+                                await refresh();
+                              }
+                              return;
+                            }
+                            const next = applyDocumentScanToForm(guestToForm(guest), data.extract);
+                            const saved = await fetch(`/api/guests/${guest.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                form: next,
+                                isForeigner: data.suggestedIsForeigner,
+                              }),
+                            });
+                            if (!saved.ok) {
+                              setScanNote("Скан распознан, но карточку сохранить не удалось");
+                              return;
+                            }
+                            setPendingScan(null);
+                            setScanNote("Данные из скана подставлены в карточку");
+                            await refresh();
+                          })
+                          .catch(() => setScanNote("Ошибка сети"))
+                          .finally(() => setUploadBusy(false));
+                      }}
+                      className="px-3 py-1.5 text-[12px] font-bold rounded-lg text-white disabled:opacity-50"
+                      style={{ background: "hsl(var(--primary))" }}
+                    >
+                      {uploadBusy ? "Распознавание…" : "Распознать и заполнить"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={uploadBusy}
+                      onClick={() => {
+                        const file = pendingScan;
+                        const guestId = selected.id;
+                        setUploadBusy(true);
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        fd.append("type", "passport");
+                        void fetch(`/api/guests/${guestId}/documents`, { method: "POST", body: fd })
+                          .then(async (res) => {
+                            if (!res.ok) {
+                              setScanNote("Не удалось прикрепить файл");
+                              return;
+                            }
+                            setPendingScan(null);
+                            setScanNote("");
+                            await refresh();
+                          })
+                          .catch(() => setScanNote("Ошибка сети"))
+                          .finally(() => setUploadBusy(false));
+                      }}
+                      className="px-3 py-1.5 text-[12px] font-bold rounded-lg border border-border bg-card disabled:opacity-50"
+                    >
+                      Только прикрепить
+                    </button>
+                    <button
+                      type="button"
+                      disabled={uploadBusy}
+                      onClick={() => {
+                        setPendingScan(null);
+                        setScanNote("");
+                      }}
+                      className="px-3 py-1.5 text-[12px] font-bold text-muted-foreground"
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                  {scanNote && <p className="text-[11px] font-semibold text-foreground">{scanNote}</p>}
+                </div>
+              )}
+              {!pendingScan && scanNote && (
+                <p className="mx-4 mt-2 text-[11px] font-semibold text-success">{scanNote}</p>
+              )}
               {selected.documents.length === 0 ? (
                 <div className="px-4 py-6 text-center text-[12px] text-muted-foreground">Нет прикреплённых сканов</div>
               ) : (

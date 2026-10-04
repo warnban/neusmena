@@ -59,9 +59,10 @@ export function CheckInPaymentModal({
   const contractLeft = Math.max(0, booking.amount - booking.paid);
   const needsPayment = nightsLeft > 0 && contractLeft > 0;
 
-  async function submitCheckIn(payload?: BookingPaymentPayload): Promise<boolean> {
+  async function submitCheckIn(payload?: BookingPaymentPayload, forceSkip = false): Promise<boolean> {
     setError("");
     setBusy(true);
+    const skipPayment = forceSkip || !needsPayment;
     try {
       const res = await fetch(`/api/bookings/${booking.id}/checkin`, {
         method: "POST",
@@ -71,8 +72,8 @@ export function CheckInPaymentModal({
           regCardSigned: true,
           migRegSubmitted,
           migRegNotifNumber: migRegNotifNumber.trim() || undefined,
-          skipPayment: !needsPayment,
-          ...(payload
+          skipPayment,
+          ...(!skipPayment && payload
             ? {
                 paymentMethod: payload.paymentMethod,
                 paymentAmount: payload.amount,
@@ -163,8 +164,21 @@ export function CheckInPaymentModal({
               </button>
             </div>
           )}
-          {needsPayment && error && (
-            <p className="text-[12px] text-destructive font-semibold mt-3">{error}</p>
+          {needsPayment && (
+            <div className="mt-3 space-y-2">
+              {error && <p className="text-[12px] text-destructive font-semibold">{error}</p>}
+              <button
+                type="button"
+                onClick={() => void submitCheckIn(undefined, true)}
+                disabled={busy}
+                className="w-full py-2.5 text-[13px] font-bold rounded-xl border border-border text-foreground hover:bg-muted disabled:opacity-50"
+              >
+                {busy ? "Заселение…" : "Заселить без оплаты"}
+              </button>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Гость заселится, неоплаченные ночи останутся долгом.
+              </p>
+            </div>
           )}
         </div>
     </Modal>
