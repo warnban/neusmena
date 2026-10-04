@@ -1,7 +1,7 @@
 import type { Bed, Booking, Room, Transaction } from "@/lib/types";
 import type { PaymentMethodDef } from "@/lib/payment-methods";
 import { money, fmtDateRu } from "@/lib/format";
-import { calcOccupancyPct, sellableUnits } from "@/lib/occupancy-capacity";
+import { liveOccupancySnapshot, sellableUnits } from "@/lib/occupancy-capacity";
 import {
   calcCashBalance,
   expenseAmount,
@@ -10,7 +10,7 @@ import {
   revenueAmount,
   transactionOnReportMskDay,
 } from "@/lib/finance";
-import { parseMskDateKey, fmtMskDateTime } from "@/lib/msk-time";
+import { mskDateKey, parseMskDateKey, fmtMskDateTime } from "@/lib/msk-time";
 
 const ACCOMMODATION = "accommodation";
 const MS_DAY = 86_400_000;
@@ -23,6 +23,8 @@ export type DailyPmBreakdown = {
 
 export type DailyReportData = {
   occupancy: number;
+  occupied: number;
+  capacity: number;
   soldNights: number;
   availableNights: number;
   accommodationTotal: number;
@@ -45,9 +47,20 @@ function countDayOccupancy(
   bookings: Booking[],
   rooms: Room[],
   beds: Bed[],
-  date: Date
-): number {
-  return calcOccupancyPct(bookings, rooms, beds, date);
+  dateKey: string
+): { pct: number; occupied: number; capacity: number } {
+  // Сегодня — та же цифра, что на дашборде: фактический статус номеров и коек.
+  if (dateKey === mskDateKey()) {
+    const live = liveOccupancySnapshot(rooms, beds);
+    return { pct: live.pct, occupied: live.occupied, capacity: live.capacity };
+  }
+  const capacity = sellableUnits(rooms, beds);
+  const occupied = bookings.filter((b) => {
+    if (b.status !== "checkedin" && b.status !== "checkedout") return false;
+    return mskDateKey(b.checkIn) <= dateKey && mskDateKey(b.checkOut) > dateKey;
+  }).length;
+  const pct = capacity > 0 ? Math.round((occupied / capacity) * 100) : 0;
+  return { pct, occupied, capacity };
 }
 
 function previousDateKey(dateKey: string): string {
@@ -96,6 +109,8 @@ export function buildDailyCloseReport(
   const cashOpening = calcCashBalance(transactions, bookings, previousDateKey(dateKey));
   const cashClosing = calcCashBalance(transactions, bookings, dateKey);
 
+  const dayOccupancy = countDayOccupancy(bookings, rooms, beds, dateKey);
+
   const soldNights = bookings.reduce((s, b) => {
     if (b.status === "cancelled") return s;
     if (sameDay(b.checkIn, date)) {
@@ -106,7 +121,9 @@ export function buildDailyCloseReport(
   }, 0);
 
   return {
-    occupancy: countDayOccupancy(bookings, rooms, beds, date),
+    occupancy: dayOccupancy.pct,
+    occupied: dayOccupancy.occupied,
+    capacity: dayOccupancy.capacity,
     soldNights,
     availableNights: sellableUnits(rooms, beds),
     accommodationTotal,

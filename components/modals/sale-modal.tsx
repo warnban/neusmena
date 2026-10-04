@@ -12,7 +12,7 @@ import { mskDateKey } from "@/lib/msk-time";
 
 type Mode = "sale" | "expense";
 
-type CartItem = { serviceId: string; qty: number };
+type CartItem = { serviceId: string; qty: number; amount: number | null };
 
 export function SaleModal({ onClose }: { onClose: () => void }) {
   const { services, expenses, pmConfig, hotels, hotelId, canManageSettings, refresh } = useApp();
@@ -33,7 +33,8 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
   const cartDetails = useMemo(() => {
     return cart.map((c) => {
       const item = catalog.find((s) => s.id === c.serviceId);
-      return { ...c, item, subtotal: (item?.price ?? 0) * c.qty };
+      const catalogSum = (item?.price ?? 0) * c.qty;
+      return { ...c, item, subtotal: c.amount == null ? catalogSum : c.amount };
     }).filter((c) => c.item);
   }, [cart, catalog]);
 
@@ -44,13 +45,13 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
     setCart((prev) => {
       const exists = prev.find((c) => c.serviceId === id);
       if (exists) return prev.filter((c) => c.serviceId !== id);
-      return [...prev, { serviceId: id, qty: 1 }];
+      return [...prev, { serviceId: id, qty: 1, amount: null }];
     });
   }
 
   function setQty(id: string, qty: number) {
     setCart((prev) =>
-      prev.map((c) => (c.serviceId === id ? { ...c, qty: Math.max(1, qty) } : c))
+      prev.map((c) => (c.serviceId === id ? { ...c, qty: Math.max(1, qty), amount: null } : c))
     );
   }
 
@@ -98,7 +99,11 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
           kind: mode === "sale" ? "service" : "expense",
           paymentMethod: paymentSel.mode === "single" ? paymentSel.method : paymentSel.parts[0]?.method,
           splits: isSplit ? paymentSel.parts : undefined,
-          items: cart,
+          items: cartDetails.map((c) => ({
+            serviceId: c.serviceId,
+            qty: c.qty,
+            amount: c.subtotal,
+          })),
           note: note.trim() || undefined,
           operationDate: canManageSettings ? operationDate : undefined,
         }),
@@ -212,7 +217,19 @@ export function SaleModal({ onClose }: { onClose: () => void }) {
                   <button type="button" onClick={() => setQty(c.serviceId, c.qty - 1)} className="w-6 h-6 rounded border border-border flex items-center justify-center"><Minus size={10} /></button>
                   <span className="w-6 text-center font-bold">{c.qty}</span>
                   <button type="button" onClick={() => setQty(c.serviceId, c.qty + 1)} className="w-6 h-6 rounded border border-border flex items-center justify-center"><Plus size={10} /></button>
-                  <span className="w-20 text-right font-bold">{money(c.subtotal)}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={c.subtotal}
+                    onChange={(e) => {
+                      const next = Math.max(0, Math.round(Number(e.target.value) || 0));
+                      setCart((prev) =>
+                        prev.map((row) => (row.serviceId === c.serviceId ? { ...row, amount: next } : row))
+                      );
+                    }}
+                    className="w-24 px-2 py-1 text-right text-[12px] font-bold rounded-lg border border-border bg-background text-foreground outline-none"
+                    aria-label={`Сумма: ${c.item!.name}`}
+                  />
                 </div>
               ))}
               <div className="flex justify-between pt-2 border-t border-border font-black text-[15px]">

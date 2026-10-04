@@ -12,6 +12,7 @@ import { formDisplayName } from "@/lib/guest-form";
 import { BookingPaymentForm, type BookingPaymentPayload } from "@/components/bookings/booking-payment-form";
 import { guestStayPlace } from "@/lib/dorm";
 import { Modal } from "@/components/ui/modal";
+import { prepaidNights, bookingStayNights } from "@/lib/booking-payment-due";
 
 export function CheckInPaymentModal({
   booking,
@@ -28,7 +29,7 @@ export function CheckInPaymentModal({
   onClose: () => void;
   onDone?: () => void;
 }) {
-  const { rooms, beds, hotelDiscountRules, refresh } = useApp();
+  const { rooms, beds, hotelDiscountRules, refresh, transactions } = useApp();
   const room = rooms.find((r) => r.id === booking.roomId);
   const bed = booking.bedId ? beds.find((b) => b.id === booking.bedId) : undefined;
   const roomPrice = room?.price ?? 0;
@@ -50,8 +51,13 @@ export function CheckInPaymentModal({
   );
 
   const displayGuestName = useMemo(() => formDisplayName(form), [form]);
-  const debt = Math.max(0, totalAmount - booking.paid);
-  const needsPayment = debt > 0;
+  const bookingTx = useMemo(
+    () => transactions.filter((t) => t.bookingId === booking.id),
+    [transactions, booking.id]
+  );
+  const nightsLeft = Math.max(0, bookingStayNights(booking) - prepaidNights(booking, booking.paid, bookingTx));
+  const contractLeft = Math.max(0, booking.amount - booking.paid);
+  const needsPayment = nightsLeft > 0 && contractLeft > 0;
 
   async function submitCheckIn(payload?: BookingPaymentPayload): Promise<boolean> {
     setError("");
@@ -133,7 +139,7 @@ export function CheckInPaymentModal({
             <BookingPaymentForm
               booking={booking}
               roomPrice={roomPrice}
-              transactions={[]}
+              transactions={bookingTx}
               onSubmit={handlePayment}
               busy={busy}
               showSubmit

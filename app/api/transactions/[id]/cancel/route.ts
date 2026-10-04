@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { assertCanManageHotel } from "@/lib/permissions";
+import { assertHotelWrite } from "@/lib/permissions";
 import { cancelTransaction } from "@/lib/transaction-cancel.server";
 import { prisma } from "@/lib/prisma";
 import { apiErrorMessage } from "@/lib/api-error";
@@ -32,7 +32,7 @@ export async function POST(_req: Request, context: RouteParams) {
       return NextResponse.json({ error: "Транзакция не найдена" }, { status: 404 });
     }
 
-    const auth = await assertCanManageHotel(session, tx.hotelId);
+    const auth = await assertHotelWrite(session, tx.hotelId);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
     const result = await cancelTransaction(id, session.seatId, session.userId);

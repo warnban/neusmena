@@ -24,6 +24,7 @@ export function TransactionDetailSheet({
   hotelName,
   transactionCategories,
   canManage,
+  canCancel,
   cancelBusy,
   onClose,
   onCancel,
@@ -34,11 +35,14 @@ export function TransactionDetailSheet({
   hotelName?: string;
   transactionCategories: TransactionCategoryDef[];
   canManage: boolean;
+  /** Отмена доступна администратору, редактирование — только управляющему и владельцу. */
+  canCancel?: boolean;
   cancelBusy: boolean;
   onClose: () => void;
   onCancel: (id: string) => Promise<void>;
   onUpdated: () => Promise<void>;
 }) {
+  const allowCancel = canCancel ?? canManage;
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editable, setEditable] = useState(false);
@@ -393,7 +397,7 @@ export function TransactionDetailSheet({
                 Закрыть
               </button>
 
-              {canManage && !cancelled && (
+              {allowCancel && !cancelled && (
                 confirmCancel ? (
                   <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 space-y-2 md:flex md:flex-1 md:items-center md:justify-between md:gap-4 md:ml-4 md:p-4">
                     <p className="text-[12px] font-semibold text-center md:text-left text-foreground">

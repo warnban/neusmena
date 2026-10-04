@@ -19,6 +19,7 @@ import { DailyReportPanel } from "@/components/reports/daily-report-panel";
 import { ShiftHandoverPanel } from "@/components/reports/shift-handover-panel";
 import { MonthComparisonPanel } from "@/components/reports/month-comparison-panel";
 import { CategoryBreakdownPanel } from "@/components/reports/category-breakdown-panel";
+import { PaymentBalancePanel } from "@/components/reports/payment-balance-panel";
 import { TransactionsPanel } from "@/components/reports/transactions-panel";
 import { MetersPanel } from "@/components/reports/meters-panel";
 import { RevenueSlicePanel } from "@/components/reports/revenue-slice-panel";
@@ -27,7 +28,7 @@ import { Modal } from "@/components/ui/modal";
 import { mskDateKey } from "@/lib/msk-time";
 
 export default function ReportsPage() {
-  const { transactions, hotelId, bookings, rooms, beds, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings } = useApp();
+  const { transactions, hotelId, bookings, rooms, beds, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings, canWriteHotelOps } = useApp();
   const [tab, setTab] = useState<"analytics" | "revenue" | "finance" | "shift" | "daily" | "salaries" | "transactions" | "meters">("analytics");
   const [analyticsView, setAnalyticsView] = useState<"overview" | "comparison">("overview");
   const [pmVis, setPmVis] = useState<Record<string, boolean>>({});
@@ -228,6 +229,12 @@ export default function ReportsPage() {
               transactionCategories={transactionCategories}
               onCategoryClick={openTransactionsByCategory}
             />
+            <PaymentBalancePanel
+              transactions={htxns}
+              bookings={scopedBookings}
+              pmConfig={pmConfig}
+              transactionCategories={transactionCategories}
+            />
               </>
             )}
           </>
@@ -335,6 +342,7 @@ export default function ReportsPage() {
             pmConfig={pmConfig}
             transactionCategories={transactionCategories}
             canManageSettings={canManageSettings}
+            canCancelTransactions={canWriteHotelOps}
             onRefresh={refresh}
             presetMethod={txPresetMethod}
             presetCategory={txPresetCategory}

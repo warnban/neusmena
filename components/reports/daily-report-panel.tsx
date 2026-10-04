@@ -23,6 +23,8 @@ type ReportData = {
   dayAdminName: string;
   nightAdminName: string;
   occupancy: number;
+  occupied?: number;
+  capacity?: number;
   cashOpening: number;
   cashClosing: number;
   accommodationTotal: number;
@@ -324,6 +326,11 @@ export function DailyReportPanel({
             <div className="bg-card rounded-xl p-4 border border-border">
               <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Загрузка</div>
               <div className="text-[28px] font-black text-primary">{report.occupancy}%</div>
+              {"occupied" in report && "capacity" in report && (
+                <div className="text-[12px] font-semibold text-foreground mt-1">
+                  {report.occupied}/{report.capacity} мест
+                </div>
+              )}
               <div className="text-[11px] text-muted-foreground mt-1">{hotelName}</div>
             </div>
 

@@ -105,25 +105,37 @@ export async function performCheckIn(
     : resolveRequestedStayExtras(booking, input.stayExtras, tariffPerNight);
   if ("error" in extras && extras.error) return { ok: false, error: extras.error };
 
-  const paidThroughRaw = input.paidThroughDate ? String(input.paidThroughDate).slice(0, 10) : "";
+  const paidThroughRaw = input.skipPayment
+    ? ""
+    : input.paidThroughDate
+      ? String(input.paidThroughDate).slice(0, 10)
+      : "";
   const extrasOnly =
-    extras.items.length > 0 && input.paymentNights != null && Math.round(Number(input.paymentNights)) === 0 && !paidThroughRaw;
-  let paymentNights = extrasOnly ? 0 : Math.max(1, Math.round(Number(input.paymentNights) || stayNights));
+    !input.skipPayment &&
+    extras.items.length > 0 &&
+    input.paymentNights != null &&
+    Math.round(Number(input.paymentNights)) === 0 &&
+    !paidThroughRaw;
+  let paymentNights = 0;
 
-  if (paidThroughRaw) {
-    if (!isValidPaidThrough(paidThroughRaw, firstUnpaidKey, checkOutKey)) {
-      return { ok: false, error: "Некорректная дата «оплачено до»" };
+  if (!input.skipPayment) {
+    paymentNights = extrasOnly ? 0 : Math.max(1, Math.round(Number(input.paymentNights) || stayNights));
+
+    if (paidThroughRaw) {
+      if (!isValidPaidThrough(paidThroughRaw, firstUnpaidKey, checkOutKey)) {
+        return { ok: false, error: "Некорректная дата «оплачено до»" };
+      }
+      paymentNights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
     }
-    paymentNights = nightsFromFirstUnpaidToPaidThrough(firstUnpaidKey, paidThroughRaw);
-  }
 
-  if (!extrasOnly && paymentNights < 1) {
-    return { ok: false, error: "Укажите период оплаты" };
-  }
+    if (!extrasOnly && paymentNights < 1) {
+      return { ok: false, error: "Укажите период оплаты" };
+    }
 
-  const maxPayNights = Math.max(1, mskNightDiff(firstUnpaidKey, checkOutKey));
-  if (paymentNights > maxPayNights) {
-    return { ok: false, error: "Слишком много ночей для оплаты" };
+    const nightsLeft = firstUnpaidKey >= checkOutKey ? 0 : mskNightDiff(firstUnpaidKey, checkOutKey);
+    if (paymentNights > nightsLeft) {
+      return { ok: false, error: "Слишком много ночей для оплаты" };
+    }
   }
 
   if (!input.skipPayment && !extrasOnly && paymentAmount <= 0) {

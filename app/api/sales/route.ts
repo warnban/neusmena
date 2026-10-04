@@ -14,7 +14,7 @@ import {
   validateSplitParts,
 } from "@/lib/payment-split";
 
-type SaleItem = { serviceId: string; qty: number };
+type SaleItem = { serviceId: string; qty: number; amount?: number };
 
 export async function POST(req: NextRequest) {
   const session = await import("@/lib/auth").then((m) => m.getSession());
@@ -75,7 +75,10 @@ export async function POST(req: NextRequest) {
   const lineItems = items.map((item) => {
     const svc = svcMap[item.serviceId];
     const qty = Math.max(1, Math.round(Number(item.qty) || 1));
-    return { svc, qty, amount: svc.price * qty, category: catalogItemCategory(svc.name), name: svc.name };
+    const catalogSum = svc.price * qty;
+    const requested = Math.round(Number(item.amount));
+    const amount = Number.isFinite(requested) && requested >= 0 ? Math.min(requested, 10_000_000) : catalogSum;
+    return { svc, qty, amount, category: catalogItemCategory(svc.name), name: svc.name };
   });
   const total = lineItems.reduce((sum, l) => sum + l.amount, 0);
 

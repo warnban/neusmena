@@ -79,6 +79,7 @@ export function TransactionsPanel({
   pmConfig,
   transactionCategories,
   canManageSettings,
+  canCancelTransactions,
   onRefresh,
   presetMethod,
   presetCategory,
@@ -90,6 +91,7 @@ export function TransactionsPanel({
   pmConfig: Record<string, { label: string; color: string; bg: string; icon: string }>;
   transactionCategories: TransactionCategoryDef[];
   canManageSettings: boolean;
+  canCancelTransactions?: boolean;
   onRefresh: () => Promise<void>;
   presetMethod?: string | null;
   presetCategory?: string | null;
@@ -483,6 +485,7 @@ export function TransactionsPanel({
         hotelName={selectedTx && hotelId === "all" ? hotelNameFor(selectedTx) : undefined}
         transactionCategories={transactionCategories}
         canManage={canManageSettings}
+        canCancel={canCancelTransactions ?? canManageSettings}
         cancelBusy={cancelBusyId === selectedTx?.id}
         onClose={() => setSelectedTx(null)}
         onCancel={cancelTx}

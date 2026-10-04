@@ -666,7 +666,7 @@ export default function LinenControlPage() {
                       min={0}
                       value={form[key]}
                       onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-[13px]"
+                      className="mt-1 w-full rounded-lg border border-border bg-background text-foreground px-2 py-1.5 text-[13px]"
                     />
                   </label>
                 ))}
@@ -678,7 +678,7 @@ export default function LinenControlPage() {
                   min={0}
                   value={form.washCost}
                   onChange={(e) => setForm((f) => ({ ...f, washCost: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-[13px]"
+                  className="mt-1 w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-[13px]"
                 />
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -696,7 +696,7 @@ export default function LinenControlPage() {
                   value={form.notes}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                   rows={2}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-[13px] resize-none"
+                  className="mt-1 w-full rounded-lg border border-border bg-background text-foreground px-3 py-2 text-[13px] resize-none"
                 />
               </label>
               <div>
