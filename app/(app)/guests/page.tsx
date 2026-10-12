@@ -174,8 +174,16 @@ export default function GuestsPage() {
     return map;
   }, [scopedBookings]);
 
+  const hotelGuestIds = useMemo(() => {
+    if (hotelId === "all") return null;
+    const ids = new Set<string>();
+    for (const b of scopedBookings) if (b.guestId) ids.add(b.guestId);
+    return ids;
+  }, [scopedBookings, hotelId]);
+
   const filtered = guests.filter((g) => {
     const q = search.toLowerCase();
+    if (!q && hotelGuestIds && !hotelGuestIds.has(g.id)) return false;
     const matchSearch =
       !q ||
       g.name.toLowerCase().includes(q) ||
@@ -239,7 +247,14 @@ export default function GuestsPage() {
 
   return (
     <>
-      <TopBar title="База гостей" subtitle={`${guests.length} гостей`} />
+      <TopBar
+        title="База гостей"
+        subtitle={
+          hotelGuestIds
+            ? `${hotelGuestIds.size} гостей в отеле · ${guests.length} в сети`
+            : `${guests.length} гостей`
+        }
+      />
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         <div
           className={`${
@@ -249,7 +264,7 @@ export default function GuestsPage() {
           <div className="p-4 border-b border-border space-y-2.5">
             <div className="relative">
               <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ФИО, телефон или email..." className="w-full pl-8 pr-3 py-2 text-[12px] rounded-xl outline-none focus:ring-1 focus:ring-ring bg-muted border border-border text-foreground" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={hotelGuestIds ? "Поиск по всей сети: ФИО, телефон, email..." : "ФИО, телефон или email..."} className="w-full pl-8 pr-3 py-2 text-[12px] rounded-xl outline-none focus:ring-1 focus:ring-ring bg-muted border border-border text-foreground" />
             </div>
             <div className="flex flex-wrap gap-2">
               <Select

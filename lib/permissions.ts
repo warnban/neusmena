@@ -91,6 +91,14 @@ export async function assertHotelWrite(session: SessionPayload | null, hotelId: 
   if (!canWriteHotelOps(session.role)) {
     return { ok: false as const, status: 403, error: "Недостаточно прав" };
   }
+  return assertHotelAccess(session, hotelId);
+}
+
+/** Пользователь работает в этом отеле (любая роль, включая горничных). */
+export async function assertHotelAccess(session: SessionPayload | null, hotelId: string) {
+  if (!session?.seatId) {
+    return { ok: false as const, status: 401, error: "Unauthorized" };
+  }
 
   const hotel = await prisma.hotel.findFirst({
     where: { id: hotelId, seatId: session.seatId },

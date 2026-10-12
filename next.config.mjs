@@ -9,6 +9,7 @@ const nextConfig = {
   },
   outputFileTracingIncludes: {
     "/api/**/*": [
+      "./templates/**/*",
       "./node_modules/sharp/**/*",
       "./node_modules/@img/**/*",
       "./node_modules/@aws-sdk/**/*",

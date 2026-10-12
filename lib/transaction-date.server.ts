@@ -53,17 +53,23 @@ export async function assertPaymentOperationAllowed(
   operationDateKey: string
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const todayKey = mskDateKey();
-  if (operationDateKey !== todayKey && canManageSettings(role)) {
-    return { ok: true };
-  }
+  const isManagerBackdate = operationDateKey !== todayKey && canManageSettings(role);
 
-  const payLock = await assertPaymentsOpen(hotelId);
-  if (!payLock.ok) {
-    return { ok: false, error: payLock.error, status: payLock.status };
+  if (!isManagerBackdate) {
+    const payLock = await assertPaymentsOpen(hotelId);
+    if (!payLock.ok) {
+      return { ok: false, error: payLock.error, status: payLock.status };
+    }
   }
 
   if (await isReportDayClosed(hotelId, operationDateKey)) {
-    return { ok: false, error: "Сутки закрыты отчётом", status: 403 };
+    return {
+      ok: false,
+      error: isManagerBackdate
+        ? "Сутки закрыты отчётом — сначала разблокируйте отчёт за этот день"
+        : "Сутки закрыты отчётом",
+      status: 403,
+    };
   }
 
   return { ok: true };

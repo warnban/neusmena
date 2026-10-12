@@ -7,12 +7,11 @@ import {
   MANUAL_TX_BLOCKED_CATEGORIES,
   normalizeCategoryLabel,
 } from "@/lib/transaction-categories";
-import { isReportDayClosed, manualTxTypeFromDirection } from "@/lib/transaction-manual.server";
+import { manualTxTypeFromDirection } from "@/lib/transaction-manual.server";
 import {
   assertPaymentOperationAllowed,
   resolveTransactionDateInput,
 } from "@/lib/transaction-date.server";
-import { mskDateKey } from "@/lib/msk-time";
 import { apiErrorMessage } from "@/lib/api-error";
 
 export async function POST(req: NextRequest) {
@@ -38,17 +37,13 @@ export async function POST(req: NextRequest) {
     const auth = await assertCanManageHotel(session, hotelId);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-    const payLock = await assertPaymentOperationAllowed(hotelId, session.role, mskDateKey());
-    if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
-
     const dateResolved = resolveTransactionDateInput(session.role, body.date ?? body.operationDate);
     if (!dateResolved.ok) {
       return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
     }
 
-    if (!dateResolved.isBackdate && (await isReportDayClosed(hotelId, dateResolved.dateKey))) {
-      return NextResponse.json({ error: "Сутки закрыты отчётом — создание транзакций недоступно" }, { status: 403 });
-    }
+    const payLock = await assertPaymentOperationAllowed(hotelId, session.role, dateResolved.dateKey);
+    if (!payLock.ok) return NextResponse.json({ error: payLock.error }, { status: payLock.status });
 
     const label = normalizeCategoryLabel(categoryInput);
     const code = categoryCodeFromLabel(label);

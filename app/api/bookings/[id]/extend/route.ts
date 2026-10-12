@@ -6,7 +6,7 @@ import { contractAfterStayNightDelta, unpaidNightTariff } from "@/lib/stay-contr
 import { assertHotelWrite } from "@/lib/permissions";
 import { mskDateKey, mskDayAfter, mskNightDiff, parseMskDateKey } from "@/lib/msk-time";
 import { apiErrorMessage } from "@/lib/api-error";
-import { hasBookingDateOverlap } from "@/lib/booking-availability.server";
+import { assertPlaceFreeInTx, hasBookingDateOverlap, PlaceTakenError } from "@/lib/booking-availability.server";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -108,15 +108,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const newAmount = contractAfterStayNightDelta(booking.amount, nightDelta, extendTariff);
     const amountDelta = newAmount - booking.amount;
 
-    const [updated, stayAmendment] = await prisma.$transaction([
-      prisma.booking.update({
+    const saved = await prisma.$transaction(async (tx) => {
+      if (newCheckOutKey > prevCheckOutKey) {
+        await assertPlaceFreeInTx(tx, {
+          hotelId: booking.hotelId,
+          roomId: booking.roomId,
+          bedId: booking.bedId,
+          checkIn: checkInKey,
+          checkOut: newCheckOutKey,
+          excludeBookingId: booking.id,
+        });
+      }
+      const updated = await tx.booking.update({
         where: { id: booking.id },
         data: {
           checkOut: newCheckOut,
           amount: newAmount,
         },
-      }),
-      prisma.stayAmendment.create({
+      });
+      const stayAmendment = await tx.stayAmendment.create({
         data: {
           bookingId: booking.id,
           prevCheckOut: booking.checkOut,
@@ -127,8 +137,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           nightDelta,
           amountDelta,
         },
-      }),
-    ]);
+      });
+      return { updated, stayAmendment };
+    }).catch((e) => {
+      if (e instanceof PlaceTakenError) return null;
+      throw e;
+    });
+    if (!saved) {
+      return NextResponse.json({ error: new PlaceTakenError().message }, { status: 409 });
+    }
+    const { updated, stayAmendment } = saved;
 
     return NextResponse.json({
       ok: true,

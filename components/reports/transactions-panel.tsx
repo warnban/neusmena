@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RotateCcw, Search } from "lucide-react";
+import { Plus, RotateCcw, Search, X } from "lucide-react";
 import { Icon } from "@/components/icon";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
 import { TransactionDetailSheet } from "@/components/reports/transaction-detail-sheet";
 import { CreateTransactionSheet } from "@/components/reports/create-transaction-sheet";
 import { money } from "@/lib/format";
-import { expenseAmount, isExpenseType, revenueAmount } from "@/lib/finance";
+import { expenseAmount, isExpenseType, isOtaPayment, revenueAmount } from "@/lib/finance";
+import { txCategoryLabel } from "@/lib/tx-categories";
 import {
   isTransactionCancelled,
   txAmountColor,
@@ -30,6 +31,8 @@ export type TxFilterState = {
   dateFrom: string;
   dateTo: string;
   query: string;
+  /** Как в аналитике: оплаты OTA не учитываются. */
+  excludeOta: boolean;
 };
 
 export const DEFAULT_TX_FILTER: TxFilterState = {
@@ -39,6 +42,7 @@ export const DEFAULT_TX_FILTER: TxFilterState = {
   dateFrom: "",
   dateTo: "",
   query: "",
+  excludeOta: false,
 };
 
 type TxListRow =
@@ -46,6 +50,7 @@ type TxListRow =
   | { kind: "tx"; tx: Transaction };
 
 function matchesFilter(t: Transaction, filter: TxFilterState): boolean {
+  if (filter.excludeOta && isOtaPayment(t)) return false;
   if (filter.method !== "all" && t.paymentMethod !== filter.method) return false;
   if (filter.category !== "all" && t.category !== filter.category) return false;
   if (filter.direction === "income" && isExpenseType(t.type)) return false;
@@ -64,6 +69,7 @@ function matchesFilter(t: Transaction, filter: TxFilterState): boolean {
 function isFilterActive(filter: TxFilterState): boolean {
   return (
     filter.direction !== "all" ||
+    filter.excludeOta ||
     filter.method !== "all" ||
     filter.category !== "all" ||
     Boolean(filter.dateFrom) ||
@@ -81,9 +87,7 @@ export function TransactionsPanel({
   canManageSettings,
   canCancelTransactions,
   onRefresh,
-  presetMethod,
-  presetCategory,
-  presetDirection,
+  preset,
 }: {
   transactions: Transaction[];
   hotels: Hotel[];
@@ -93,9 +97,7 @@ export function TransactionsPanel({
   canManageSettings: boolean;
   canCancelTransactions?: boolean;
   onRefresh: () => Promise<void>;
-  presetMethod?: string | null;
-  presetCategory?: string | null;
-  presetDirection?: "income" | "expense" | null;
+  preset?: Partial<TxFilterState> | null;
 }) {
   const [filter, setFilter] = useState<TxFilterState>(DEFAULT_TX_FILTER);
   const [txPage, setTxPage] = useState(1);
@@ -118,34 +120,24 @@ export function TransactionsPanel({
     [pmConfig]
   );
 
-  const categoryOptions = useMemo(
-    () => [
+  const categoryOptions = useMemo(() => {
+    const codes = new Set(buildCategoryOptions(transactionCategories).map((c) => c.code));
+    transactions.forEach((t) => codes.add(t.category));
+    if (filter.category !== "all") codes.add(filter.category);
+    return [
       { value: "all", label: "Все категории" },
-      ...buildCategoryOptions(transactionCategories).map((c) => ({
-        value: c.code,
-        label: c.label,
-      })),
-    ],
-    [transactionCategories]
-  );
+      ...Array.from(codes)
+        .map((code) => ({ value: code, label: txCategoryLabel(code, transactionCategories) }))
+        .sort((a, b) => a.label.localeCompare(b.label, "ru")),
+    ];
+  }, [transactionCategories, transactions, filter.category]);
 
   useEffect(() => {
-    if (presetMethod) {
-      setFilter((f) => ({ ...f, method: presetMethod }));
+    if (preset) {
+      setFilter({ ...DEFAULT_TX_FILTER, ...preset });
       setTxPage(1);
     }
-  }, [presetMethod]);
-
-  useEffect(() => {
-    if (presetCategory || presetDirection) {
-      setFilter((f) => ({
-        ...f,
-        ...(presetCategory ? { category: presetCategory } : {}),
-        ...(presetDirection ? { direction: presetDirection } : {}),
-      }));
-      setTxPage(1);
-    }
-  }, [presetCategory, presetDirection]);
+  }, [preset]);
 
   useEffect(() => {
     setTxPage(1);
@@ -334,6 +326,18 @@ export function TransactionsPanel({
                 {label}
               </button>
             ))}
+
+            {filter.excludeOta && (
+              <button
+                type="button"
+                onClick={() => setFilter((f) => ({ ...f, excludeOta: false }))}
+                title="Как в аналитике. Нажмите, чтобы показать и OTA"
+                className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-accent text-[11px] font-bold text-foreground"
+              >
+                Без OTA
+                <X size={11} />
+              </button>
+            )}
 
             {filterActive && (
               <button

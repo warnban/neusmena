@@ -195,6 +195,7 @@ model Seat {
   botMigrationMaps BotMigrationMap[]
   notePages      NotePage[]
   noteCards      NoteCard[]
+  instructions   Instruction[]
   incidents      Incident[]
   opsTasks       OpsTask[]
   createdAt DateTime @default(now())
@@ -239,6 +240,21 @@ model NoteCard {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([seatId])
+}
+
+/// Инструкции сети «вопрос — ответ»; attachments — массив { name, path, size }.
+model Instruction {
+  id          String   @id @default(uuid())
+  seat        Seat     @relation(fields: [seatId], references: [id], onDelete: Cascade)
+  seatId      String
+  question    String
+  answer      String   @default("")
+  attachments Json     @default("[]")
+  updatedBy   String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([seatId])
 }
@@ -635,6 +651,7 @@ model Booking {
   earlyCheckInFee  Int        @default(0)
   lateCheckOutFee  Int        @default(0)
   notes       String        @default("")
+  checkedInAt  DateTime?
   checkedOutAt DateTime?
   serviceSales ServiceSale[]
   transactions Transaction[]

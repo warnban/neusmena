@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { assertSeatOps } from "@/lib/permissions";
+import { assertHotelWrite, assertSeatOps } from "@/lib/permissions";
 import { assertHotelAiEnabled } from "@/lib/ai-premium.server";
 import { runHamsterChat } from "@/lib/assistant/hamster-agent.server";
 import { runAssistantChat } from "@/lib/assistant/agent.server";
@@ -29,6 +29,10 @@ export async function POST(req: NextRequest) {
     const hotelId = body.hotelId ? String(body.hotelId) : "";
     let hotelName: string | null = null;
     if (hotelId && hotelId !== "all") {
+      const hotelAccess = await assertHotelWrite(auth.session, hotelId);
+      if (!hotelAccess.ok) {
+        return NextResponse.json({ error: hotelAccess.error }, { status: hotelAccess.status });
+      }
       const aiGate = await assertHotelAiEnabled(auth.session.seatId, hotelId);
       if (!aiGate.ok) {
         return NextResponse.json({ error: aiGate.error }, { status: aiGate.status });

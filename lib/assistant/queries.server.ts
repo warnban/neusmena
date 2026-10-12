@@ -41,16 +41,16 @@ export async function getMorningBriefing(session: SessionPayload, hotelId: strin
       take: 15,
     }),
     prisma.booking.findMany({
-      where: { hotelId, status: "checkedin" },
+      where: { hotelId, hotel: { seatId: session.seatId! }, status: "checkedin" },
       include: { room: true },
     }),
     prisma.hkTask.findMany({
-      where: { hotelId, status: { in: ["pending", "in_progress"] } },
+      where: { hotelId, hotel: { seatId: session.seatId! }, status: { in: ["pending", "in_progress"] } },
       orderBy: { time: "asc" },
       take: 10,
     }),
     prisma.transaction.findMany({
-      where: { hotelId, cancelledAt: null },
+      where: { hotelId, hotel: { seatId: session.seatId! }, cancelledAt: null },
     }),
   ]);
 

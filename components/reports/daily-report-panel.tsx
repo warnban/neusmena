@@ -7,8 +7,8 @@ import { Icon } from "@/components/icon";
 import { DatePicker } from "@/components/ui/date-picker";
 import { money, fmtDate } from "@/lib/format";
 import { mskDateKey, fmtMskDateTime } from "@/lib/msk-time";
-import type { DailyPmBreakdown } from "@/lib/daily-report";
-import { formatDailyReportText } from "@/lib/daily-report";
+import type { DailyGuestMoveLine, DailyPmBreakdown } from "@/lib/daily-report";
+import { foreignerMovesForDay, formatDailyReportText } from "@/lib/daily-report";
 import { useApp } from "@/components/providers/app-data";
 import { txCategoryLabel } from "@/lib/tx-categories";
 
@@ -44,6 +44,28 @@ type PaymentLock = {
   unlockAt: string | null;
 };
 
+function ForeignerMoves({ title, rows }: { title: string; rows: DailyGuestMoveLine[] }) {
+  return (
+    <div>
+      <h4 className="text-[12px] font-bold text-muted-foreground uppercase mb-1.5">
+        {title} <span className="text-foreground">{rows.length}</span>
+      </h4>
+      {rows.length === 0 ? (
+        <p className="text-[12px] text-muted-foreground">Нет</p>
+      ) : (
+        <ul className="space-y-1">
+          {rows.map((row, i) => (
+            <li key={`${row.place}-${i}`} className="text-[12.5px] text-foreground flex gap-2">
+              <span className="font-bold tabular-nums min-w-[3.5rem]">{row.place}</span>
+              <span>{row.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function DailyReportPanel({
   hotelId,
   hotelName,
@@ -57,7 +79,7 @@ export function DailyReportPanel({
   canReopenReport?: boolean;
   onClosed?: () => void;
 }) {
-  const { transactions } = useApp();
+  const { transactions, bookings, guests, rooms, beds } = useApp();
   const todayKey = useMemo(() => mskDateKey(), []);
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -84,6 +106,10 @@ export function DailyReportPanel({
           label: t.note?.trim() || txCategoryLabel(t.category),
         })),
     [transactions, hotelId, selectedDate]
+  );
+  const foreigners = useMemo(
+    () => foreignerMovesForDay(bookings, guests, rooms, beds, hotelId, selectedDate),
+    [bookings, guests, rooms, beds, hotelId, selectedDate]
   );
 
   const loadReport = useCallback(async (date: string) => {
@@ -185,7 +211,7 @@ export function DailyReportPanel({
     const text = formatDailyReportText(
       hotelName,
       selectedDate,
-      { ...report, expenseLines },
+      { ...report, expenseLines, foreigners },
       paymentLabels,
       report.closedAt
     );
@@ -428,6 +454,11 @@ export function DailyReportPanel({
               <section className="pt-3 border-t-2 border-primary/30">
                 <h4 className="text-[12px] font-bold text-muted-foreground uppercase mb-1">Итого денег в кассе</h4>
                 <div className="text-[26px] font-black text-primary">{money(report.cashClosing)}</div>
+              </section>
+
+              <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-border">
+                <ForeignerMoves title="Заезды иностранцев" rows={foreigners.arrivals} />
+                <ForeignerMoves title="Выезды иностранцев" rows={foreigners.departures} />
               </section>
             </div>
           </>

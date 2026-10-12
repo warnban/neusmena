@@ -208,6 +208,12 @@ export async function PATCH(req: NextRequest) {
       const auth = await assertCanManageHotel(session, hotelId);
       if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
+      const staffMember = await prisma.staff.findFirst({
+        where: { id: staffId, seatId: auth.session.seatId },
+        select: { id: true },
+      });
+      if (!staffMember) return NextResponse.json({ error: "Сотрудник не найден" }, { status: 404 });
+
       let run = await prisma.bonusCalculationRun.findFirst({
         where: { hotelId, periodMonth, status: "draft" },
       });
@@ -235,6 +241,16 @@ export async function PATCH(req: NextRequest) {
     if (action === "toggle") {
       const lineId = String(body.lineId ?? "");
       const included = Boolean(body.included);
+      const line = await prisma.bonusCalculationLine.findUnique({
+        where: { id: lineId },
+        select: { run: { select: { hotelId: true, status: true } } },
+      });
+      if (!line) return NextResponse.json({ error: "Строка не найдена" }, { status: 404 });
+      const auth = await assertCanManageHotel(session, line.run.hotelId);
+      if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+      if (line.run.status !== "draft") {
+        return NextResponse.json({ error: "Премии по этому расчёту уже выплачены" }, { status: 400 });
+      }
       await prisma.bonusCalculationLine.update({ where: { id: lineId }, data: { included } });
       return NextResponse.json({ ok: true });
     }

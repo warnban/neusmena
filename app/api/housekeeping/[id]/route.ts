@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { placeHasCheckedInGuest, setBedStatus } from "@/lib/dorm.server";
+import { assertHotelAccess } from "@/lib/permissions";
 
 export async function PATCH(
   req: NextRequest,
@@ -19,6 +20,8 @@ export async function PATCH(
   if (!task || task.hotel.seatId !== session.seatId) {
     return NextResponse.json({ error: "Задача не найдена" }, { status: 404 });
   }
+  const access = await assertHotelAccess(session, task.hotelId);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const body = await req.json();
   const { status, assignee, priority } = body as {

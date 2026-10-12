@@ -6,6 +6,7 @@ import { isExpenseType } from "@/lib/finance";
 import {
   canEditTransaction,
   directionFromTxType,
+  isReportDayClosed,
   manualTxTypeFromDirection,
 } from "@/lib/transaction-manual.server";
 import { resolveTransactionDateInput } from "@/lib/transaction-date.server";
@@ -100,7 +101,15 @@ export async function PATCH(req: NextRequest, context: RouteParams) {
       if (!dateResolved.ok) {
         return NextResponse.json({ error: dateResolved.error }, { status: dateResolved.status });
       }
-      if (dateResolved.dateKey !== mskDateKey(tx.date)) txDate = dateResolved.date;
+      if (dateResolved.dateKey !== mskDateKey(tx.date)) {
+        if (await isReportDayClosed(tx.hotelId, dateResolved.dateKey)) {
+          return NextResponse.json(
+            { error: "Сутки, на которые переносится операция, закрыты отчётом" },
+            { status: 403 }
+          );
+        }
+        txDate = dateResolved.date;
+      }
     }
 
     const updated = await prisma.transaction.update({

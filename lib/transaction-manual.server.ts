@@ -44,12 +44,14 @@ export async function canEditTransaction(
   if (refund) return { ok: false, reason: "Возвраты нельзя редактировать" };
   if (salary) return { ok: false, reason: "Зарплатные операции нельзя редактировать" };
 
-  const dateKey = mskDateKey(tx.date);
-  if (role && canManageSettings(role)) {
-    return { ok: true };
-  }
-  if (await isReportDayClosed(tx.hotelId, dateKey)) {
-    return { ok: false, reason: "Сутки закрыты отчётом — редактирование недоступно" };
+  if (await isReportDayClosed(tx.hotelId, mskDateKey(tx.date))) {
+    return {
+      ok: false,
+      reason:
+        role && canManageSettings(role)
+          ? "Сутки закрыты отчётом — сначала разблокируйте отчёт за этот день"
+          : "Сутки закрыты отчётом — редактирование недоступно",
+    };
   }
 
   return { ok: true };

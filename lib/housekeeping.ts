@@ -3,8 +3,8 @@ import type { HkTaskCategory } from "@/lib/types";
 import { formatDormPlaceLabel } from "@/lib/dorm";
 import { startOfDay, daysBetween } from "@/lib/housekeeping-utils";
 
-/** Сколько часов задача остаётся в колонке «Готово» */
-export const HK_DONE_VISIBLE_HOURS = 24;
+/** Сколько часов убранный номер остаётся в списке уборки */
+export const HK_DONE_VISIBLE_HOURS = 12;
 
 export function formatHkPlaceLabel(roomNumber: string, bedLabel?: string | null): string {
   if (!bedLabel?.trim()) return roomNumber;

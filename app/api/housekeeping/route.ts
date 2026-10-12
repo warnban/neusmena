@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { syncScheduledCleaning } from "@/lib/housekeeping";
+import { assertHotelAccess } from "@/lib/permissions";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -21,6 +22,9 @@ export async function GET(req: NextRequest) {
       include: { hotels: true },
     });
     hotelIds = staff?.hotels.map((h) => h.hotelId) ?? [];
+  }
+  if (hotelId && hotelId !== "all" && !hotelIds.includes(hotelId)) {
+    return NextResponse.json({ error: "Нет доступа к отелю" }, { status: 403 });
   }
 
   const filter = {
@@ -53,8 +57,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Заполните обязательные поля" }, { status: 400 });
   }
 
-  const hotel = await prisma.hotel.findFirst({ where: { id: hotelId, seatId: session.seatId } });
-  if (!hotel) return NextResponse.json({ error: "Отель не найден" }, { status: 404 });
+  const access = await assertHotelAccess(session, String(hotelId));
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const task = await prisma.hkTask.create({
     data: {

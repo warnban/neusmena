@@ -120,7 +120,7 @@ export function CheckInPrintModal({
           <div className="flex items-center gap-2 min-w-0">
             <FileText size={16} className="text-primary flex-shrink-0" />
             <div className="min-w-0">
-              <h2 className="text-[14px] font-bold truncate">Документы при заселении</h2>
+              <h2 className="text-[14px] font-bold truncate">Правила проживания</h2>
               <p className="text-[11px] text-muted-foreground truncate">{guestName}</p>
             </div>
           </div>
@@ -131,7 +131,8 @@ export function CheckInPrintModal({
 
         <div className="p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-4">
           <p className="text-[12px] text-muted-foreground">
-            Распечатайте документы для подписания гостем, затем перейдите к оплате.
+            Распечатайте правила проживания для подписания гостем, затем перейдите к оплате.
+            Остальные бланки можно напечатать из карточки гостя.
           </p>
 
           {loading ? (
@@ -192,7 +193,13 @@ export function CheckInPrintModal({
             className="flex items-center justify-center gap-1.5 flex-1 min-w-[140px] py-2.5 text-[13px] font-bold rounded-xl text-white bg-primary hover:opacity-90 disabled:opacity-50"
           >
             <Printer size={14} />
-            {printBusy ? "…" : allReady ? "Распечатать все" : `Печать (${readyCount})`}
+            {printBusy
+              ? "…"
+              : CHECK_IN_PRINT_FORM_IDS.length === 1
+                ? "Распечатать"
+                : allReady
+                  ? "Распечатать все"
+                  : `Печать (${readyCount})`}
           </button>
           <button
             type="button"

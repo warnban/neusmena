@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { generateToken, setAuthCookie } from "@/lib/auth";
+import {
+  clientIp,
+  loginBlockedFor,
+  registerLoginFailure,
+  registerLoginSuccess,
+  tooManyAttemptsMessage,
+} from "@/lib/login-rate-limit.server";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -11,14 +18,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Укажите email и пароль" }, { status: 400 });
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const ip = clientIp(req);
+  const blockedFor = loginBlockedFor("crm", ip, normalizedEmail);
+  if (blockedFor > 0) {
+    return NextResponse.json(
+      { error: tooManyAttemptsMessage(blockedFor) },
+      { status: 429, headers: { "Retry-After": String(blockedFor) } }
+    );
+  }
+
   const user = await prisma.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
+    where: { email: normalizedEmail },
     include: { staff: true },
   });
 
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    registerLoginFailure("crm", ip, normalizedEmail);
     return NextResponse.json({ error: "Неверный email или пароль" }, { status: 401 });
   }
+  registerLoginSuccess("crm", normalizedEmail);
 
   if (user.isBlocked) {
     return NextResponse.json({ error: "Аккаунт заблокирован. Обратитесь к администратору." }, { status: 403 });

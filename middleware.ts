@@ -44,6 +44,7 @@ function isCrmAppPath(pathname: string): boolean {
     pathname.startsWith("/organizations") ||
     pathname.startsWith("/refunds") ||
     pathname.startsWith("/handbook") ||
+    pathname.startsWith("/instructions") ||
     pathname.startsWith("/incidents") ||
     pathname.startsWith("/api/") && !pathname.startsWith("/api/platform")
   );

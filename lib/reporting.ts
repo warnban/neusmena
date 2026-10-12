@@ -1,10 +1,14 @@
-import type { Bed, Booking, Room, Transaction } from "@/lib/types";
+import type { Bed, Booking, OrganizationStay, Room, Transaction } from "@/lib/types";
 import { sellableUnits } from "@/lib/occupancy-capacity";
 import {
   isExpenseType,
+  isTransactionRecognized,
   revenueAmount,
   transactionInReportMonth,
+  transactionReportDate,
 } from "@/lib/finance";
+import { mskDateKey, parseMskDateKey } from "@/lib/msk-time";
+import { addMonths, currentMonthKey, monthKeyToString } from "@/lib/month-comparison";
 
 const MONTH_LABELS = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
 const MS_DAY = 86_400_000;
@@ -29,31 +33,49 @@ export interface MonthStats {
   revpar: number;
 }
 
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
+/** Отрезок проживания одной единицы (номер или койка) в ключах МСК; checkOut не включается. */
+type StaySpan = { checkIn: string; checkOut: string };
+
+function dayIndex(key: string): number {
+  return Math.round(parseMskDateKey(key).getTime() / MS_DAY);
 }
 
-function monthBounds(year: number, month: number) {
-  return {
-    start: new Date(year, month, 1),
-    end: new Date(year, month + 1, 0),
-    days: daysInMonth(year, month),
-  };
+/**
+ * Месяц в ключах МСК; для текущего месяца — только прошедшие ночи, включая сегодняшнюю,
+ * чтобы будущие брони не считались проданными.
+ */
+function monthSpan(year: number, month: number): { from: string; to: string; days: number } {
+  const from = `${monthKeyToString({ year, month })}-01`;
+  const next = `${monthKeyToString(addMonths({ year, month }, 1))}-01`;
+  const tomorrow = mskDateKey(new Date(Date.now() + MS_DAY));
+  const to = tomorrow < next ? tomorrow : next;
+  return { from, to, days: Math.max(0, dayIndex(to) - dayIndex(from)) };
 }
 
-export function countSoldNights(
-  bookings: Booking[],
-  periodStart: Date,
-  periodEnd: Date
-): number {
-  let nights = 0;
+/** Фактически прожитые ночи: только заселённые/выехавшие брони и номера организаций. */
+function staySpans(bookings: Booking[], organizationStays: OrganizationStay[]): StaySpan[] {
+  const spans: StaySpan[] = [];
   for (const b of bookings) {
-    if (b.status === "cancelled") continue;
-    const start = b.checkIn < periodStart ? periodStart : b.checkIn;
-    const end = b.checkOut > periodEnd ? periodEnd : b.checkOut;
-    if (end > start) {
-      nights += Math.ceil((end.getTime() - start.getTime()) / MS_DAY);
+    if (b.status !== "checkedin" && b.status !== "checkedout") continue;
+    const left = b.status === "checkedout" && b.checkedOutAt ? new Date(b.checkedOutAt) : b.checkOut;
+    spans.push({ checkIn: mskDateKey(b.checkIn), checkOut: mskDateKey(left < b.checkOut ? left : b.checkOut) });
+  }
+  for (const stay of organizationStays) {
+    if (stay.status === "cancelled") continue;
+    for (const r of stay.rooms) {
+      const out = r.checkedOutAt && r.checkedOutAt < r.checkOut ? r.checkedOutAt : r.checkOut;
+      spans.push({ checkIn: mskDateKey(r.checkIn), checkOut: mskDateKey(out) });
     }
+  }
+  return spans;
+}
+
+export function countSoldNights(spans: StaySpan[], from: string, to: string): number {
+  let nights = 0;
+  for (const s of spans) {
+    const start = s.checkIn > from ? s.checkIn : from;
+    const end = s.checkOut < to ? s.checkOut : to;
+    if (end > start) nights += dayIndex(end) - dayIndex(start);
   }
   return nights;
 }
@@ -80,16 +102,16 @@ export function calcMonthStats(
   rooms: Room[],
   year: number,
   month: number,
-  beds: Bed[] = []
+  beds: Bed[] = [],
+  organizationStays: OrganizationStay[] = []
 ): MonthStats {
-  const { start, end, days } = monthBounds(year, month);
-  const unitCount = sellableUnits(rooms, beds);
-  const availableNights = unitCount * days;
-  const soldNights = countSoldNights(bookings, start, end);
+  const { from, to, days } = monthSpan(year, month);
+  const availableNights = sellableUnits(rooms, beds) * days;
+  const soldNights = countSoldNights(staySpans(bookings, organizationStays), from, to);
   const roomRevenue = roomRevenueInMonth(transactions, bookings, year, month);
 
   const occupancy =
-    availableNights > 0 ? Math.round((soldNights / availableNights) * 100) : 0;
+    availableNights > 0 ? Math.min(100, Math.round((soldNights / availableNights) * 100)) : 0;
   const adr = soldNights > 0 ? Math.round(roomRevenue / soldNights) : 0;
   const revpar = availableNights > 0 ? Math.round(roomRevenue / availableNights) : 0;
 
@@ -107,16 +129,14 @@ export function buildMonthlyReport(
   rooms: Room[],
   paymentCodes: string[],
   months = 6,
-  beds: Bed[] = []
+  beds: Bed[] = [],
+  organizationStays: OrganizationStay[] = []
 ): MonthlyReportRow[] {
-  const now = new Date();
+  const now = currentMonthKey();
   const rows: MonthlyReportRow[] = [];
 
   for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const year = d.getFullYear();
-    const month = d.getMonth();
-    const label = MONTH_LABELS[month];
+    const { year, month } = addMonths(now, -i);
 
     const monthRevTx = transactions.filter(
       (t) =>
@@ -127,15 +147,13 @@ export function buildMonthlyReport(
     const pm: Record<string, number> = {};
     for (const code of paymentCodes) pm[code] = 0;
     monthRevTx.forEach((t) => {
-      const signed = revenueAmount(t);
-      if (t.paymentMethod in pm) pm[t.paymentMethod] += signed;
-      else pm[t.paymentMethod] = (pm[t.paymentMethod] ?? 0) + signed;
+      pm[t.paymentMethod] = (pm[t.paymentMethod] ?? 0) + revenueAmount(t);
     });
 
-    const stats = calcMonthStats(transactions, bookings, rooms, year, month, beds);
+    const stats = calcMonthStats(transactions, bookings, rooms, year, month, beds, organizationStays);
 
     rows.push({
-      m: label,
+      m: `${MONTH_LABELS[month]} ${String(year).slice(-2)}`,
       rev,
       roomRev: stats.roomRevenue,
       occ: stats.occupancy,
@@ -148,37 +166,43 @@ export function buildMonthlyReport(
   return rows;
 }
 
+/** Доход с 1-го числа по день `dayOfMonth` включительно (МСК). */
+function revenueMonthToDay(
+  transactions: Transaction[],
+  bookings: Booking[],
+  year: number,
+  month: number,
+  dayOfMonth: number
+): number {
+  const prefix = monthKeyToString({ year, month });
+  const lastKey = `${prefix}-${String(dayOfMonth).padStart(2, "0")}`;
+  return transactions
+    .filter((t) => {
+      if (!isTransactionRecognized(t, bookings) || isExpenseType(t.type)) return false;
+      const key = mskDateKey(transactionReportDate(t, bookings));
+      return key.startsWith(prefix) && key <= lastKey;
+    })
+    .reduce((s, t) => s + revenueAmount(t), 0);
+}
+
 export function calcKpis(
   transactions: Transaction[],
   bookings: Booking[],
   rooms: Room[],
   paymentCodes: string[] = [],
-  beds: Bed[] = []
+  beds: Bed[] = [],
+  organizationStays: OrganizationStay[] = []
 ) {
-  const monthly = buildMonthlyReport(transactions, bookings, rooms, paymentCodes, 6, beds);
-  const current = monthly[monthly.length - 1];
-  const prev = monthly[monthly.length - 2];
+  const monthly = buildMonthlyReport(transactions, bookings, rooms, paymentCodes, 6, beds, organizationStays);
+  const now = currentMonthKey();
+  const prev = addMonths(now, -1);
+  const today = Number(mskDateKey().slice(8, 10));
 
-  const now = new Date();
-  const currentStats = calcMonthStats(
-    transactions,
-    bookings,
-    rooms,
-    now.getFullYear(),
-    now.getMonth(),
-    beds
-  );
-  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevStats = calcMonthStats(
-    transactions,
-    bookings,
-    rooms,
-    prevMonth.getFullYear(),
-    prevMonth.getMonth(),
-    beds
-  );
+  const currentStats = calcMonthStats(transactions, bookings, rooms, now.year, now.month, beds, organizationStays);
+  const prevStats = calcMonthStats(transactions, bookings, rooms, prev.year, prev.month, beds, organizationStays);
 
-  const totalRev = monthly.reduce((s, r) => s + r.rev, 0);
+  const monthRevenue = revenueMonthToDay(transactions, bookings, now.year, now.month, today);
+  const prevSameDaysRevenue = revenueMonthToDay(transactions, bookings, prev.year, prev.month, today);
 
   return {
     occupancy: currentStats.occupancy,
@@ -187,8 +211,9 @@ export function calcKpis(
     adrTrend: pctTrend(currentStats.adr, prevStats.adr),
     revpar: currentStats.revpar,
     revparTrend: pctTrend(currentStats.revpar, prevStats.revpar),
-    totalRevenue: totalRev,
-    revenueTrend: prev ? pctTrend(current?.rev ?? 0, prev.rev) : 0,
+    totalRevenue: monthly.reduce((s, r) => s + r.rev, 0),
+    monthRevenue,
+    revenueTrend: pctTrend(monthRevenue, prevSameDaysRevenue),
     spark: monthly.map((r) => r.occ),
     adrSpark: monthly.map((r) => r.adr),
     revparSpark: monthly.map((r) => r.revpar),

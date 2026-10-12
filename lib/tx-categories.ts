@@ -13,8 +13,11 @@ export const TX_CAT_LABELS: Record<string, string> = {
   bonus: "Премия",
 };
 
-/** Подпись категории в отчётах (проживание → «Гости»). */
-export function txCategoryLabel(category: string): string {
+/** Подпись категории в отчётах (проживание → «Гости»), с учётом своих категорий сети. */
+export function txCategoryLabel(
+  category: string,
+  custom: { code: string; label: string }[] = []
+): string {
   if (category === "accommodation") return "Гости";
-  return TX_CAT_LABELS[category] ?? category;
+  return TX_CAT_LABELS[category] ?? custom.find((c) => c.code === category)?.label ?? category;
 }

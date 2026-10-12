@@ -4,8 +4,10 @@ import { getSession } from "@/lib/auth";
 import { assertHotelWrite } from "@/lib/permissions";
 import { HK_CATEGORY_TYPES, hkTimeNow } from "@/lib/housekeeping";
 import { apiErrorMessage } from "@/lib/api-error";
+import { PlaceTakenError } from "@/lib/booking-availability.server";
 import {
   assertRoomAvailable,
+  assertRoomAvailableInTx,
   parseStayDate,
   recalcOrganizationStayAmount,
   shouldOccupyRoom,
@@ -67,6 +69,7 @@ export async function PATCH(
     const dormRoomIds: string[] = [];
 
     const updated = await prisma.$transaction(async (tx) => {
+      await assertRoomAvailableInTx(tx, sr.roomId, checkIn, checkOut, sr.id, sr.bedId);
       const row = await tx.organizationStayRoom.update({
         where: { id: sr.id },
         data: { checkIn, checkOut },
@@ -87,6 +90,9 @@ export async function PATCH(
     await recalcOrganizationStayAmount(stay.id);
     return NextResponse.json({ ok: true, room: updated });
   } catch (e) {
+    if (e instanceof PlaceTakenError) {
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
     console.error("[organization-stay-room PATCH]", e);
     return NextResponse.json({ error: apiErrorMessage(e, "Не удалось обновить номер") }, { status: 500 });
   }

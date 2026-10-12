@@ -189,7 +189,7 @@ function GuestRow({
 }
 
 export default function DashboardPage() {
-  const { bookings, rooms, beds, hotels, hotelId, transactions, paymentMethods, loading, refresh } = useApp();
+  const { bookings, rooms, beds, hotels, hotelId, transactions, organizationStays, paymentMethods, loading, refresh } = useApp();
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [checkInBooking, setCheckInBooking] = useState<Booking | null>(null);
   const [selBooking, setSelBooking] = useState<Booking | null>(null);
@@ -223,9 +223,14 @@ export default function DashboardPage() {
 
   const codes = useMemo(() => pmCodes(paymentMethods), [paymentMethods]);
 
+  const scopedOrgStays = useMemo(
+    () => (hotelId === "all" ? organizationStays : organizationStays.filter((s) => s.hotelId === hotelId)),
+    [organizationStays, hotelId]
+  );
+
   const kpis = useMemo(
-    () => calcKpis(scopedTxns, scopedBookings, scopedRooms, codes, scopedBeds),
-    [scopedTxns, scopedBookings, scopedRooms, scopedBeds, codes.join(",")]
+    () => calcKpis(scopedTxns, scopedBookings, scopedRooms, codes, scopedBeds, scopedOrgStays),
+    [scopedTxns, scopedBookings, scopedRooms, scopedBeds, scopedOrgStays, codes.join(",")]
   );
 
   const todayKey = mskDateKey(TODAY);

@@ -4,6 +4,7 @@ import {
   revenueAmount,
   transactionInReportMonth,
 } from "@/lib/finance";
+import { mskDateKey } from "@/lib/msk-time";
 import { txCategoryLabel } from "@/lib/tx-categories";
 
 const MONTH_NAMES = [
@@ -20,10 +21,17 @@ export type ComparisonRowKind =
   | "expense-cat"
   | "balance";
 
-export type ComparisonRow = {
+/** Строка таблицы «категория × месяцы»; values[i] соответствует months[i]. */
+export type MonthTableRow = {
   id: string;
   label: string;
   kind: ComparisonRowKind;
+  /** Код категории для строк income-cat / expense-cat. */
+  category?: string;
+  values: number[];
+};
+
+export type ComparisonRow = Omit<MonthTableRow, "values"> & {
   left: number;
   right: number;
 };
@@ -34,39 +42,25 @@ export type MonthComparisonResult = {
   rows: ComparisonRow[];
 };
 
-function sumCategoryRevenue(txs: Transaction[]): Record<string, number> {
-  const map: Record<string, number> = {};
-  for (const t of txs) {
-    const amt = revenueAmount(t);
-    if (amt === 0) continue;
-    map[t.category] = (map[t.category] ?? 0) + amt;
-  }
-  return map;
-}
-
-function sumCategoryExpense(txs: Transaction[]): Record<string, number> {
-  const map: Record<string, number> = {};
-  for (const t of txs) {
-    const amt = expenseAmount(t);
-    if (amt === 0) continue;
-    map[t.category] = (map[t.category] ?? 0) + amt;
-  }
-  return map;
-}
-
 function monthTransactions(
   transactions: Transaction[],
   bookings: Booking[],
-  year: number,
-  month: number,
-  paymentMethods: string[]
+  key: MonthKey,
+  pmSet: Set<string>
 ): Transaction[] {
-  const pmSet = new Set(paymentMethods);
   return transactions.filter(
-    (t) =>
-      pmSet.has(t.paymentMethod) &&
-      transactionInReportMonth(t, bookings, year, month)
+    (t) => pmSet.has(t.paymentMethod) && transactionInReportMonth(t, bookings, key.year, key.month)
   );
+}
+
+function sumByCategory(txs: Transaction[], amount: (t: Transaction) => number): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const t of txs) {
+    const amt = amount(t);
+    if (amt === 0) continue;
+    map[t.category] = (map[t.category] ?? 0) + amt;
+  }
+  return map;
 }
 
 export function monthLabel(key: MonthKey): string {
@@ -94,23 +88,74 @@ export function parseMonthKey(value: string): MonthKey | null {
 }
 
 export function currentMonthKey(): MonthKey {
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth() };
+  const key = mskDateKey();
+  return { year: Number(key.slice(0, 4)), month: Number(key.slice(5, 7)) - 1 };
+}
+
+export function addMonths(key: MonthKey, delta: number): MonthKey {
+  const total = key.year * 12 + key.month + delta;
+  return { year: Math.floor(total / 12), month: ((total % 12) + 12) % 12 };
 }
 
 export function previousMonthKey(key: MonthKey): MonthKey {
-  const d = new Date(key.year, key.month - 1, 1);
-  return { year: d.getFullYear(), month: d.getMonth() };
+  return addMonths(key, -1);
+}
+
+/** Месяцы от старого к новому, заканчивая `last`. */
+export function lastMonths(last: MonthKey, count: number): MonthKey[] {
+  return Array.from({ length: count }, (_, i) => addMonths(last, i - count + 1));
 }
 
 export function buildMonthOptions(count = 24): MonthKey[] {
   const now = currentMonthKey();
-  const options: MonthKey[] = [];
-  for (let i = 0; i < count; i++) {
-    const d = new Date(now.year, now.month - i, 1);
-    options.push({ year: d.getFullYear(), month: d.getMonth() });
-  }
-  return options;
+  return Array.from({ length: count }, (_, i) => addMonths(now, -i));
+}
+
+/** Изменение в процентах; null, если базы нет. */
+export function pctChange(from: number, to: number): number | null {
+  if (!from) return null;
+  return Math.round(((to - from) / Math.abs(from)) * 100);
+}
+
+export function buildMonthTable(
+  transactions: Transaction[],
+  bookings: Booking[],
+  months: MonthKey[],
+  paymentMethods: string[],
+  customCategories: { code: string; label: string }[] = []
+): MonthTableRow[] {
+  const pmSet = new Set(paymentMethods);
+  const perMonth = months.map((m) => monthTransactions(transactions, bookings, m, pmSet));
+  const income = perMonth.map((txs) => txs.reduce((s, t) => s + revenueAmount(t), 0));
+  const expense = perMonth.map((txs) => txs.reduce((s, t) => s + expenseAmount(t), 0));
+  const incomeCats = perMonth.map((txs) => sumByCategory(txs, revenueAmount));
+  const expenseCats = perMonth.map((txs) => sumByCategory(txs, expenseAmount));
+
+  const categoryRows = (
+    maps: Record<string, number>[],
+    kind: "income-cat" | "expense-cat"
+  ): MonthTableRow[] => {
+    const codes = new Set<string>();
+    maps.forEach((m) => Object.keys(m).forEach((c) => codes.add(c)));
+    return Array.from(codes)
+      .map((code) => ({
+        id: `${kind === "income-cat" ? "income" : "expense"}-${code}`,
+        label: txCategoryLabel(code, customCategories),
+        kind,
+        category: code,
+        values: maps.map((m) => m[code] ?? 0),
+      }))
+      .filter((row) => row.values.some((v) => v !== 0))
+      .sort((a, b) => Math.max(...b.values) - Math.max(...a.values));
+  };
+
+  return [
+    { id: "income-total", label: "Доход", kind: "income-total", values: income },
+    ...categoryRows(incomeCats, "income-cat"),
+    { id: "expense-total", label: "Расход", kind: "expense-total", values: expense },
+    ...categoryRows(expenseCats, "expense-cat"),
+    { id: "balance", label: "Остаток", kind: "balance", values: income.map((v, i) => v - expense[i]) },
+  ];
 }
 
 export function buildMonthComparison(
@@ -119,91 +164,17 @@ export function buildMonthComparison(
   left: MonthKey,
   right: MonthKey,
   paymentMethods: string[],
-  categoryLabels?: Record<string, string>
+  customCategories: { code: string; label: string }[] = []
 ): MonthComparisonResult {
-  const label = (cat: string) =>
-    categoryLabels ? (cat === "accommodation" ? "Гости" : (categoryLabels[cat] ?? cat)) : txCategoryLabel(cat);
-
-  const leftTx = monthTransactions(transactions, bookings, left.year, left.month, paymentMethods);
-  const rightTx = monthTransactions(transactions, bookings, right.year, right.month, paymentMethods);
-
-  const leftIncome = leftTx.reduce((s, t) => s + revenueAmount(t), 0);
-  const rightIncome = rightTx.reduce((s, t) => s + revenueAmount(t), 0);
-  const leftExpense = leftTx.reduce((s, t) => s + expenseAmount(t), 0);
-  const rightExpense = rightTx.reduce((s, t) => s + expenseAmount(t), 0);
-
-  const leftIncomeCats = sumCategoryRevenue(leftTx);
-  const rightIncomeCats = sumCategoryRevenue(rightTx);
-  const leftExpenseCats = sumCategoryExpense(leftTx);
-  const rightExpenseCats = sumCategoryExpense(rightTx);
-
-  const rows: ComparisonRow[] = [
-    {
-      id: "income-total",
-      label: "Доход",
-      kind: "income-total",
-      left: leftIncome,
-      right: rightIncome,
-    },
-  ];
-
-  const incomeCategories = Array.from(
-    new Set([...Object.keys(leftIncomeCats), ...Object.keys(rightIncomeCats)])
-  ).sort((a, b) => {
-    const maxA = Math.max(leftIncomeCats[a] ?? 0, rightIncomeCats[a] ?? 0);
-    const maxB = Math.max(leftIncomeCats[b] ?? 0, rightIncomeCats[b] ?? 0);
-    return maxB - maxA;
-  });
-
-  for (const cat of incomeCategories) {
-    const l = leftIncomeCats[cat] ?? 0;
-    const r = rightIncomeCats[cat] ?? 0;
-    if (l === 0 && r === 0) continue;
-    rows.push({
-      id: `income-${cat}`,
-      label: label(cat),
-      kind: "income-cat",
-      left: l,
-      right: r,
-    });
-  }
-
-  rows.push({
-    id: "expense-total",
-    label: "Расход",
-    kind: "expense-total",
-    left: leftExpense,
-    right: rightExpense,
-  });
-
-  const expenseCategories = Array.from(
-    new Set([...Object.keys(leftExpenseCats), ...Object.keys(rightExpenseCats)])
-  ).sort((a, b) => {
-    const maxA = Math.max(leftExpenseCats[a] ?? 0, rightExpenseCats[a] ?? 0);
-    const maxB = Math.max(leftExpenseCats[b] ?? 0, rightExpenseCats[b] ?? 0);
-    return maxB - maxA;
-  });
-
-  for (const cat of expenseCategories) {
-    const l = leftExpenseCats[cat] ?? 0;
-    const r = rightExpenseCats[cat] ?? 0;
-    if (l === 0 && r === 0) continue;
-    rows.push({
-      id: `expense-${cat}`,
-      label: label(cat),
-      kind: "expense-cat",
-      left: l,
-      right: r,
-    });
-  }
-
-  rows.push({
-    id: "balance",
-    label: "Остаток",
-    kind: "balance",
-    left: leftIncome - leftExpense,
-    right: rightIncome - rightExpense,
-  });
-
+  const rows = buildMonthTable(transactions, bookings, [left, right], paymentMethods, customCategories).map(
+    ({ values, ...row }) => ({ ...row, left: values[0], right: values[1] })
+  );
   return { left, right, rows };
+}
+
+/** Первый и последний день месяца в формате YYYY-MM-DD. */
+export function monthDateRange(key: MonthKey): { from: string; to: string } {
+  const prefix = monthKeyToString(key);
+  const lastDay = new Date(Date.UTC(key.year, key.month + 1, 0)).getUTCDate();
+  return { from: `${prefix}-01`, to: `${prefix}-${String(lastDay).padStart(2, "0")}` };
 }

@@ -11,7 +11,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:push": "prisma db push",
-    "generate:guest-forms": "npm run generate:pd-consent && npm run generate:hotel-rules && npm run generate:hotel-contract && npm run generate:hotel-contract-amendment && npm run generate:refund-form",
+    "generate:guest-forms": "npm run generate:pd-consent && npm run generate:hotel-rules && npm run generate:hotel-contract && npm run generate:hotel-contract-amendment && npm run generate:refund-form && npm run generate:incident-forms",
     "generate:refund-form": "node scripts/generate-refund-form-template.mjs",
     "generate:pd-consent": "node scripts/generate-personal-data-consent-template.mjs",
     "generate:hotel-rules": "node scripts/generate-hotel-rules-template.mjs",

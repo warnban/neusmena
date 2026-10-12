@@ -10,7 +10,12 @@ import { stayExtrasTotal } from "@/lib/stay-extras";
 import { contractAfterNightPayment, contractAfterReopeningNights, contractAfterStayNightDelta, unpaidNightTariff } from "@/lib/stay-contract";
 import { formatBedDisplay, formatDormPlaceLabel } from "@/lib/dorm.server";
 import { guessGenderFromName } from "@/lib/dorm";
-import { resolveRoomForBooking, hasBookingDateOverlap } from "@/lib/booking-availability.server";
+import {
+  assertPlaceFreeInTx,
+  hasBookingDateOverlap,
+  PlaceTakenError,
+  resolveRoomForBooking,
+} from "@/lib/booking-availability.server";
 import {
   bookingStayNights,
   firstUnpaidNightDateKey,
@@ -282,12 +287,22 @@ async function executeExtendStay(session: SessionPayload, payload: Record<string
   const newAmount = contractAfterStayNightDelta(booking.amount, nightDelta, extendTariff);
   const amountDelta = newAmount - booking.amount;
 
-  await prisma.$transaction([
-    prisma.booking.update({
+  const saved = await prisma.$transaction(async (tx) => {
+    if (newCheckOutKey > prevCheckOutKey) {
+      await assertPlaceFreeInTx(tx, {
+        hotelId: booking.hotelId,
+        roomId: booking.roomId,
+        bedId: booking.bedId,
+        checkIn: checkInKey,
+        checkOut: newCheckOutKey,
+        excludeBookingId: booking.id,
+      });
+    }
+    await tx.booking.update({
       where: { id: booking.id },
       data: { checkOut: newCheckOut, amount: newAmount },
-    }),
-    prisma.stayAmendment.create({
+    });
+    await tx.stayAmendment.create({
       data: {
         bookingId: booking.id,
         prevCheckOut: booking.checkOut,
@@ -298,8 +313,15 @@ async function executeExtendStay(session: SessionPayload, payload: Record<string
         nightDelta,
         amountDelta,
       },
-    }),
-  ]);
+    });
+    return true;
+  }).catch((e) => {
+    if (e instanceof PlaceTakenError) return false;
+    throw e;
+  });
+  if (!saved) {
+    return { ok: false as const, error: "На эти даты уже есть другая бронь или размещение организации" };
+  }
 
   return {
     ok: true as const,
@@ -466,7 +488,9 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
     checkOut: checkOutDate,
   });
 
-  const { booking, guest } = await prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
+    await assertPlaceFreeInTx(tx, { hotelId, roomId: room.id, bedId, checkIn, checkOut });
+
     const guest = existingGuest
       ? await tx.guest.update({
           where: { id: existingGuest.id },
@@ -506,7 +530,12 @@ async function executeCreateBooking(session: SessionPayload, payload: Record<str
       },
     });
     return { booking, guest };
+  }).catch((e) => {
+    if (e instanceof PlaceTakenError) return null;
+    throw e;
   });
+  if (!created) return { ok: false as const, error: new PlaceTakenError().message };
+  const { booking, guest } = created;
 
   const bed = bedId ? await prisma.bed.findUnique({ where: { id: bedId } }) : null;
   const place = bed && room.kind === "dorm"

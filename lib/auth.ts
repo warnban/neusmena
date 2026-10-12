@@ -37,11 +37,11 @@ export async function getSession(): Promise<SessionPayload | null> {
   const { prisma } = await import("@/lib/prisma");
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { isBlocked: true },
+    select: { isBlocked: true, role: true, seatId: true, staff: { select: { id: true } } },
   });
-  if (!user || user.isBlocked) return null;
+  if (!user || user.isBlocked || user.seatId !== payload.seatId) return null;
 
-  return payload;
+  return { ...payload, role: user.role, staffId: user.staff?.id };
 }
 
 /** COOKIE_SECURE=false — только пока сайт открыт по http без домена и HTTPS. */
@@ -81,6 +81,5 @@ export async function getAccessibleHotelIds(session: SessionPayload): Promise<st
     include: { hotels: true },
   });
   if (!staff) return [];
-  const ids = staff.hotels.map((h) => h.hotelId);
-  return ids.length > 1 ? "all" : ids;
+  return staff.hotels.map((h) => h.hotelId);
 }

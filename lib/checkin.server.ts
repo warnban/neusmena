@@ -42,6 +42,7 @@ import {
 } from "@/lib/booking-payment-due";
 import { mskDateKey, mskNightDiff } from "@/lib/msk-time";
 import { setBedStatus } from "@/lib/dorm.server";
+import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel } from "@/lib/housekeeping";
 import type { CheckInPayload } from "@/lib/assistant/types";
 
 export type PerformCheckInInput = CheckInPayload & {
@@ -59,6 +60,9 @@ export async function performCheckIn(
   const booking = auth.booking;
   if (booking.status === "checkedin" || booking.status === "checkedout") {
     return { ok: false, error: "Гость уже заселён или выселен" };
+  }
+  if (booking.status === "cancelled") {
+    return { ok: false, error: "Бронь отменена — заселение невозможно" };
   }
 
   if (!input.regCardSigned) {
@@ -281,6 +285,7 @@ export async function performCheckIn(
       where: { id: booking.id },
       data: {
         status: "checkedin",
+        checkedInAt: new Date(),
         guestName: resolvedGuestName,
         amount: nextAmount,
         ...(payNow > 0 ? { paid: { increment: payNow } } : {}),
@@ -432,4 +437,57 @@ export function formFromScanAndGuest(
     hasVisa: Boolean(extract.hasVisa ?? guestDefaults?.hasVisa),
     preferences: String(guestDefaults?.preferences ?? ""),
   };
+}
+
+export async function performCheckout(
+  session: SessionPayload | null,
+  bookingId: string
+): Promise<
+  | { ok: true; guestName: string; roomNumber: string }
+  | { ok: false; status: number; error: string }
+> {
+  const auth = await assertBookingWrite(session, bookingId);
+  if (!auth.ok) return auth;
+
+  const booking = auth.booking;
+  if (booking.status !== "checkedin") {
+    return { ok: false, status: 400, error: "Выселить можно только заселённого гостя" };
+  }
+  const bed = booking.bedId ? await prisma.bed.findUnique({ where: { id: booking.bedId } }) : null;
+  const roomNumber = bed ? formatHkPlaceLabel(booking.room.number, bed.label) : booking.room.number;
+
+  const checkedOut = await prisma.$transaction(async (tx) => {
+    const moved = await tx.booking.updateMany({
+      where: { id: booking.id, status: "checkedin" },
+      data: { status: "checkedout", checkedOutAt: new Date() },
+    });
+    if (moved.count !== 1) return false;
+    if (!booking.bedId) {
+      await tx.room.update({ where: { id: booking.roomId }, data: { status: "cleaning" } });
+    }
+    await tx.hkTask.create({
+      data: {
+        hotelId: booking.hotelId,
+        roomId: booking.roomId,
+        bedId: booking.bedId,
+        bookingId: booking.id,
+        roomNumber,
+        type: HK_CATEGORY_TYPES.checkout,
+        category: "checkout",
+        assignee: "—",
+        priority: "high",
+        status: "pending",
+        time: hkTimeNow(),
+        est: "60 мин",
+      },
+    });
+    return true;
+  });
+  if (!checkedOut) return { ok: false, status: 409, error: "Гость уже выселен" };
+
+  if (booking.bedId) {
+    await setBedStatus(booking.bedId, "cleaning");
+  }
+
+  return { ok: true, guestName: booking.guestName, roomNumber };
 }

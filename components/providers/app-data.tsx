@@ -179,6 +179,7 @@ export function AppDataProvider({
         ...b,
         checkIn: new Date(b.checkIn),
         checkOut: new Date(b.checkOut),
+        checkedInAt: b.checkedInAt ? new Date(b.checkedInAt as string) : null,
         checkedOutAt: b.checkedOutAt ? new Date(b.checkedOutAt as string) : null,
       }))
     );

@@ -31,25 +31,36 @@ export async function PATCH(
     hkShiftRate?: number;
   };
 
+  const currentHotelIds = staff.hotels.map((h) => h.hotelId);
+  const allowedHotels = await getManagerHotelIds(check.session);
+  if (allowedHotels !== "all") {
+    if (!inviteRoleAllowed(check.session.role, staff.role)) {
+      return NextResponse.json({ error: "Управляющий может менять только администраторов и горничных" }, { status: 403 });
+    }
+    if (!currentHotelIds.some((id) => allowedHotels.includes(id))) {
+      return NextResponse.json({ error: "Сотрудник не работает в ваших отелях" }, { status: 403 });
+    }
+  }
+
   const nextRole = role ?? staff.role;
   if (!inviteRoleAllowed(check.session.role, nextRole) && nextRole !== staff.role) {
     return NextResponse.json({ error: "Нельзя назначить эту роль" }, { status: 400 });
   }
 
-  let nextHotelIds = hotelIds ?? staff.hotels.map((h) => h.hotelId);
-  const allowedHotels = await getManagerHotelIds(check.session);
+  let nextHotelIds = hotelIds ?? currentHotelIds;
   if (allowedHotels !== "all") {
-    nextHotelIds = nextHotelIds.filter((id) => allowedHotels.includes(id));
-  }
-
-  if (!nextHotelIds.length) {
-    return NextResponse.json({ error: "Нужен хотя бы один отель" }, { status: 400 });
+    const outsideScope = currentHotelIds.filter((id) => !allowedHotels.includes(id));
+    const inScope = nextHotelIds.filter((id) => allowedHotels.includes(id));
+    nextHotelIds = Array.from(new Set([...outsideScope, ...inScope]));
   }
 
   const hotels = await prisma.hotel.findMany({
     where: { seatId: check.session.seatId, id: { in: nextHotelIds } },
     select: { id: true },
   });
+  if (!hotels.length) {
+    return NextResponse.json({ error: "Нужен хотя бы один отель" }, { status: 400 });
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.staffOnHotel.deleteMany({ where: { staffId: staff.id } });

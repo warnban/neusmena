@@ -5,6 +5,13 @@ import {
   setPlatformDevCookie,
   verifyPlatformDevCredentials,
 } from "@/lib/platform-dev-auth.server";
+import {
+  clientIp,
+  loginBlockedFor,
+  registerLoginFailure,
+  registerLoginSuccess,
+  tooManyAttemptsMessage,
+} from "@/lib/login-rate-limit.server";
 
 export async function POST(req: NextRequest) {
   if (!platformDevConfigured()) {
@@ -22,9 +29,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Укажите email и пароль" }, { status: 400 });
   }
 
+  const ip = clientIp(req);
+  const blockedFor = loginBlockedFor("platform", ip, email);
+  if (blockedFor > 0) {
+    return NextResponse.json(
+      { error: tooManyAttemptsMessage(blockedFor) },
+      { status: 429, headers: { "Retry-After": String(blockedFor) } }
+    );
+  }
+
   if (!verifyPlatformDevCredentials(email, password)) {
+    registerLoginFailure("platform", ip, email);
     return NextResponse.json({ error: "Неверные учётные данные" }, { status: 401 });
   }
+  registerLoginSuccess("platform", email);
 
   const token = await generatePlatformDevToken(email);
   await setPlatformDevCookie(token);

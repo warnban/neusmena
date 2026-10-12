@@ -1,10 +1,12 @@
 import "server-only";
 
-import type { DormGender, Gender, RoomStatus } from "@prisma/client";
+import type { DormGender, Gender, Prisma, RoomStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calcStayAmount } from "@/lib/booking-pricing";
 import { guestGenderMatchesDorm } from "@/lib/dorm.server";
-import { mskNightDiff, parseMskDateKey } from "@/lib/msk-time";
+import { mskDateKey, mskNightDiff, parseMskDateKey } from "@/lib/msk-time";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 const BLOCKING_BOOKING_STATUSES = ["new", "checkedin", "confirmed"] as const;
 
@@ -36,7 +38,7 @@ export async function hasBookingDateOverlap(params: {
   roomId?: string;
   bedId?: string;
   excludeBookingId?: string;
-}): Promise<boolean> {
+}, db: Db = prisma): Promise<boolean> {
   const checkInDate = parseMskDateKey(params.checkIn);
   const checkOutDate = parseMskDateKey(params.checkOut);
 
@@ -53,7 +55,7 @@ export async function hasBookingDateOverlap(params: {
   // добираем roomId из bed (dorm-комната может быть занята организацией целиком).
   let orgCheckRoomId = params.roomId ?? null;
   if (params.bedId && !orgCheckRoomId) {
-    const bed = await prisma.bed.findUnique({
+    const bed = await db.bed.findUnique({
       where: { id: params.bedId },
       select: { roomId: true },
     });
@@ -61,9 +63,9 @@ export async function hasBookingDateOverlap(params: {
   }
 
   const [bookingHit, orgHit] = await Promise.all([
-    prisma.booking.findFirst({ where: bookingWhere, select: { id: true } }),
+    db.booking.findFirst({ where: bookingWhere, select: { id: true } }),
     orgCheckRoomId
-      ? prisma.organizationStayRoom.findFirst({
+      ? db.organizationStayRoom.findFirst({
           where: {
             roomId: orgCheckRoomId,
             status: "active",
@@ -78,6 +80,48 @@ export async function hasBookingDateOverlap(params: {
   ]);
 
   return Boolean(bookingHit || orgHit);
+}
+
+export class PlaceTakenError extends Error {
+  constructor(message = "Место уже занято на выбранные даты — обновите шахматку") {
+    super(message);
+    this.name = "PlaceTakenError";
+  }
+}
+
+/**
+ * Блокировка номера держится до коммита транзакции: параллельные записи броней и
+ * размещений организаций на тот же номер выполняются по очереди, и вторая видит первую.
+ */
+export async function lockRoomPlace(tx: Prisma.TransactionClient, roomId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${roomId}))`;
+}
+
+/** Вызывать внутри $transaction непосредственно перед записью брони. */
+export async function assertPlaceFreeInTx(
+  tx: Prisma.TransactionClient,
+  params: {
+    hotelId: string;
+    roomId: string;
+    bedId?: string | null;
+    checkIn: string;
+    checkOut: string;
+    excludeBookingId?: string;
+  }
+): Promise<void> {
+  await lockRoomPlace(tx, params.roomId);
+  const taken = await hasBookingDateOverlap(
+    {
+      hotelId: params.hotelId,
+      checkIn: params.checkIn,
+      checkOut: params.checkOut,
+      roomId: params.roomId,
+      bedId: params.bedId ?? undefined,
+      excludeBookingId: params.excludeBookingId,
+    },
+    tx
+  );
+  if (taken) throw new PlaceTakenError();
 }
 
 function dateRangesOverlap(aIn: string, aOut: string, bIn: string, bOut: string): boolean {
@@ -143,8 +187,8 @@ export async function findAvailableRooms(params: {
   const blockedDormRooms = new Set<string>();
 
   for (const b of bookings) {
-    const inKey = b.checkIn.toISOString().slice(0, 10);
-    const outKey = b.checkOut.toISOString().slice(0, 10);
+    const inKey = mskDateKey(b.checkIn);
+    const outKey = mskDateKey(b.checkOut);
     if (!dateRangesOverlap(checkIn, checkOut, inKey, outKey)) continue;
     if (b.bedId) {
       blockedBeds.add(b.bedId);
@@ -154,8 +198,8 @@ export async function findAvailableRooms(params: {
   }
 
   for (const r of orgRooms) {
-    const inKey = r.checkIn.toISOString().slice(0, 10);
-    const outKey = r.checkOut.toISOString().slice(0, 10);
+    const inKey = mskDateKey(r.checkIn);
+    const outKey = mskDateKey(r.checkOut);
     if (dateRangesOverlap(checkIn, checkOut, inKey, outKey)) {
       if (r.bedId) blockedBeds.add(r.bedId);
       else if (r.room.kind === "dorm") blockedDormRooms.add(r.roomId);

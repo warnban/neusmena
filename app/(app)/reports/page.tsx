@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import {
-  ComposedChart, Bar, Line, LineChart, PieChart, Pie, Cell,
+  ComposedChart, Bar, Line, LineChart,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { Eye, EyeOff } from "lucide-react";
@@ -20,21 +20,20 @@ import { ShiftHandoverPanel } from "@/components/reports/shift-handover-panel";
 import { MonthComparisonPanel } from "@/components/reports/month-comparison-panel";
 import { CategoryBreakdownPanel } from "@/components/reports/category-breakdown-panel";
 import { PaymentBalancePanel } from "@/components/reports/payment-balance-panel";
-import { TransactionsPanel } from "@/components/reports/transactions-panel";
+import { TransactionsPanel, type TxFilterState } from "@/components/reports/transactions-panel";
+import { monthDateRange, type MonthKey } from "@/lib/month-comparison";
 import { MetersPanel } from "@/components/reports/meters-panel";
 import { RevenueSlicePanel } from "@/components/reports/revenue-slice-panel";
 import { OperationDateField } from "@/components/ui/operation-date-field";
 import { Modal } from "@/components/ui/modal";
-import { mskDateKey } from "@/lib/msk-time";
+import { fmtMskDateKey, mskDateKey } from "@/lib/msk-time";
 
 export default function ReportsPage() {
-  const { transactions, hotelId, bookings, rooms, beds, hotels, pmConfig, transactionCategories, sourceConfig, refresh, loading, canManageSettings, canWriteHotelOps } = useApp();
+  const { transactions, hotelId, setHotelId, bookings, rooms, beds, hotels, organizationStays, pmConfig, transactionCategories, refresh, loading, canManageSettings, canWriteHotelOps } = useApp();
   const [tab, setTab] = useState<"analytics" | "revenue" | "finance" | "shift" | "daily" | "salaries" | "transactions" | "meters">("analytics");
-  const [analyticsView, setAnalyticsView] = useState<"overview" | "comparison">("overview");
+  const [analyticsView, setAnalyticsView] = useState<"overview" | "comparison">("comparison");
   const [pmVis, setPmVis] = useState<Record<string, boolean>>({});
-  const [txPresetMethod, setTxPresetMethod] = useState<string | null>(null);
-  const [txPresetCategory, setTxPresetCategory] = useState<string | null>(null);
-  const [txPresetDirection, setTxPresetDirection] = useState<"income" | "expense" | null>(null);
+  const [txPreset, setTxPreset] = useState<Partial<TxFilterState> | null>(null);
   const [encModal, setEncModal] = useState<string | null>(null);
   const [encAmount, setEncAmount] = useState("");
   const [encOperationDate, setEncOperationDate] = useState(() => mskDateKey());
@@ -42,26 +41,18 @@ export default function ReportsPage() {
   const activeHotelId = hotelId === "all" ? (hotels[0]?.id ?? "") : hotelId;
   const activeHotelName = hotels.find((h) => h.id === activeHotelId)?.name ?? "";
 
-  function openTransactionsByMethod(method: string) {
+  function openTransactions(preset: Partial<TxFilterState>) {
     setTab("transactions");
-    setTxPresetMethod(method);
-    setTxPresetCategory(null);
-    setTxPresetDirection(null);
+    setTxPreset(preset);
   }
 
-  function openTransactionsByCategory(direction: "income" | "expense", category: string) {
-    setTab("transactions");
-    setTxPresetCategory(category);
-    setTxPresetDirection(direction);
-    setTxPresetMethod(null);
+  function openTransactionsByCategory(direction: "income" | "expense", category: string, month: MonthKey) {
+    const range = monthDateRange(month);
+    openTransactions({ direction, category, dateFrom: range.from, dateTo: range.to, excludeOta: true });
   }
 
   useEffect(() => {
-    if (tab !== "transactions") {
-      setTxPresetMethod(null);
-      setTxPresetCategory(null);
-      setTxPresetDirection(null);
-    }
+    if (tab !== "transactions") setTxPreset(null);
   }, [tab]);
 
   const pmEntries = Object.entries(pmConfig);
@@ -95,14 +86,19 @@ export default function ReportsPage() {
     [beds, hotelId]
   );
 
+  const scopedOrgStays = useMemo(
+    () => (hotelId === "all" ? organizationStays : organizationStays.filter((s) => s.hotelId === hotelId)),
+    [organizationStays, hotelId]
+  );
+
   const revMonthlyData = useMemo(
-    () => buildMonthlyReport(htxns, scopedBookings, scopedRooms, pmCodes, 6, scopedBeds),
-    [htxns, scopedBookings, scopedRooms, scopedBeds, pmCodes.join(",")]
+    () => buildMonthlyReport(htxns, scopedBookings, scopedRooms, pmCodes, 6, scopedBeds, scopedOrgStays),
+    [htxns, scopedBookings, scopedRooms, scopedBeds, scopedOrgStays, pmCodes.join(",")]
   );
 
   const kpis = useMemo(
-    () => calcKpis(htxns, scopedBookings, scopedRooms, pmCodes, scopedBeds),
-    [htxns, scopedBookings, scopedRooms, scopedBeds, pmCodes.join(",")]
+    () => calcKpis(htxns, scopedBookings, scopedRooms, pmCodes, scopedBeds, scopedOrgStays),
+    [htxns, scopedBookings, scopedRooms, scopedBeds, scopedOrgStays, pmCodes.join(",")]
   );
 
   const balances = useMemo(
@@ -110,12 +106,8 @@ export default function ReportsPage() {
     [htxns, scopedBookings, pmCodes.join(",")]
   );
 
-  const revChannelData = useMemo(() => {
-    const totals: Record<string, number> = {};
-    const scoped = hotelId === "all" ? bookings : bookings.filter((b) => b.hotelId === hotelId);
-    scoped.forEach((b) => { totals[b.source] = (totals[b.source] || 0) + b.amount; });
-    return Object.entries(totals).map(([k, v]) => ({ name: sourceConfig[k]?.label ?? k, color: sourceConfig[k]?.solid ?? "hsl(var(--primary))", v }));
-  }, [bookings, hotelId, sourceConfig]);
+  const todayKey = mskDateKey();
+  const monthToDateLabel = `с 1 по ${fmtMskDateKey(todayKey, true)}`;
 
   async function submitEncashment() {
     if (!encModal) return;
@@ -159,7 +151,7 @@ export default function ReportsPage() {
         {tab === "analytics" && (
           <>
             <div className="flex flex-wrap gap-2">
-              {([["overview", "Обзор"], ["comparison", "Сравнение"]] as const).map(([key, label]) => (
+              {([["comparison", "Сравнение"], ["overview", "Обзор"]] as const).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
@@ -176,65 +168,82 @@ export default function ReportsPage() {
             </div>
 
             {analyticsView === "comparison" ? (
-              hotelId === "all" ? (
-                <div className="rounded-xl border border-border bg-card p-8 text-center">
-                  <p className="text-[14px] font-bold text-foreground">Выберите отель</p>
-                  <p className="text-[12px] text-muted-foreground mt-2 max-w-md mx-auto">
-                    Сравнение месяцев доступно только для одного отеля. Переключите отель в верхней панели.
-                  </p>
+              <>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase mr-1">Отель</span>
+                  {hotels.map((h) => (
+                    <button
+                      key={h.id}
+                      type="button"
+                      onClick={() => setHotelId(h.id)}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border transition-colors ${
+                        hotelId === h.id
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-card text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {h.name}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <MonthComparisonPanel
-                  hotelId={hotelId}
-                  hotelName={hotels.find((h) => h.id === hotelId)?.name ?? ""}
-                  transactions={transactions}
-                  bookings={bookings}
-                  pmConfig={pmConfig}
-                />
-              )
+                {hotelId === "all" ? (
+                  <div className="rounded-xl border border-border bg-card p-8 text-center">
+                    <p className="text-[14px] font-bold text-foreground">Выберите отель</p>
+                    <p className="text-[12px] text-muted-foreground mt-2 max-w-md mx-auto">
+                      Месяцы сравниваются по каждому отелю отдельно.
+                    </p>
+                  </div>
+                ) : (
+                  <MonthComparisonPanel
+                    hotelId={hotelId}
+                    hotelName={hotels.find((h) => h.id === hotelId)?.name ?? ""}
+                    transactions={transactions}
+                    bookings={bookings}
+                    pmConfig={pmConfig}
+                    transactionCategories={transactionCategories}
+                    onOpenTransactions={openTransactions}
+                  />
+                )}
+              </>
             ) : (
               <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KpiCard label="Загрузка" value={`${kpis.occupancy}%`} sub="текущий месяц" trend={kpis.occupancyTrend ? `${kpis.occupancyTrend > 0 ? "+" : ""}${kpis.occupancyTrend}%` : undefined} trendDir={kpis.occupancyTrend >= 0 ? "up" : "down"} spark={kpis.spark} accent="hsl(var(--primary))" />
-              <KpiCard label="ADR" value={money(kpis.adr)} sub={`${kpis.soldNightsMonth} ночей · проживание`} accent="#10B981" />
-              <KpiCard label="RevPAR" value={money(kpis.revpar)} sub="выручка/доступный номер·день" accent="hsl(var(--primary))" />
-              <KpiCard label="Выручка" value={`${(kpis.totalRevenue / 1_000_000).toFixed(2)}M ₽`} sub="6 мес." trend={kpis.revenueTrend ? `${kpis.revenueTrend > 0 ? "+" : ""}${kpis.revenueTrend}%` : undefined} trendDir={kpis.revenueTrend >= 0 ? "up" : "down"} accent="#F59E0B" />
+              <KpiCard label="Выручка" value={money(kpis.monthRevenue)} sub={`${monthToDateLabel} · к тем же дням прошлого мес.`} trend={kpis.revenueTrend ? `${kpis.revenueTrend > 0 ? "+" : ""}${kpis.revenueTrend}%` : undefined} trendDir={kpis.revenueTrend >= 0 ? "up" : "down"} accent="#F59E0B" />
+              <KpiCard label="Загрузка" value={`${kpis.occupancy}%`} sub={`${monthToDateLabel} · фактически прожитые ночи`} trend={kpis.occupancyTrend ? `${kpis.occupancyTrend > 0 ? "+" : ""}${kpis.occupancyTrend}%` : undefined} trendDir={kpis.occupancyTrend >= 0 ? "up" : "down"} spark={kpis.spark} accent="hsl(var(--primary))" />
+              <KpiCard label="ADR" value={kpis.roomRevenueMonth ? money(kpis.adr) : "—"} sub={`${money(kpis.roomRevenueMonth)} за проживание / ${kpis.soldNightsMonth} ноч.`} accent="#10B981" />
+              <KpiCard label="RevPAR" value={kpis.roomRevenueMonth ? money(kpis.revpar) : "—"} sub="проживание / доступное место·ночь" accent="hsl(var(--primary))" />
             </div>
             <PaymentBalancePanel
               transactions={htxns}
               bookings={scopedBookings}
               pmConfig={pmConfig}
               transactionCategories={transactionCategories}
+              onOpenTransactions={openTransactions}
             />
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-2 bg-card rounded-xl p-5 border border-border">
-                <h3 className="text-[13px] font-bold text-foreground mb-4">Выручка и загрузка 2026</h3>
-                <ResponsiveContainer width="100%" height={210}>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <div className="lg:col-span-3 bg-card rounded-xl p-5 border border-border">
+                <h3 className="text-[13px] font-bold text-foreground mb-4">Выручка и загрузка · 6 месяцев</h3>
+                <ResponsiveContainer width="100%" height={240}>
                   <ComposedChart data={revMonthlyData} margin={{ left: -10, right: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="m" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                     <YAxis yAxisId="rev" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                    <YAxis yAxisId="occ" orientation="right" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} domain={[50, 100]} tickFormatter={(v) => v + "%"} />
-                    <Tooltip />
+                    <YAxis yAxisId="occ" orientation="right" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(v) => v + "%"} />
+                    <Tooltip formatter={(v, name) => [name === "Загрузка %" ? `${v}%` : money(Number(v)), name]} />
                     <Bar yAxisId="rev" dataKey="rev" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} barSize={32} name="Выручка" />
                     <Line yAxisId="occ" type="monotone" dataKey="occ" stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: "#10B981" }} name="Загрузка %" />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-              <div className="bg-card rounded-xl p-5 border border-border">
-                <h3 className="text-[13px] font-bold text-foreground mb-3">Структура дохода</h3>
-                <ResponsiveContainer width="100%" height={130}>
-                  <PieChart><Pie data={revChannelData} cx="50%" cy="50%" innerRadius={42} outerRadius={62} dataKey="v" paddingAngle={3}>{revChannelData.map((r, i) => <Cell key={i} fill={r.color} />)}</Pie><Tooltip formatter={(v) => [money(Number(v)), ""]} /></PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-1.5 mt-2">{revChannelData.map((r, i) => <div key={i} className="flex items-center justify-between text-[11px]"><div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: r.color }} /><span className="text-muted-foreground">{r.name}</span></div><span className="font-black text-foreground">{(r.v / 1000).toFixed(0)}k ₽</span></div>)}</div>
+              <div className="lg:col-span-2">
+                <CategoryBreakdownPanel
+                  transactions={htxns}
+                  bookings={scopedBookings}
+                  transactionCategories={transactionCategories}
+                  onCategoryClick={openTransactionsByCategory}
+                />
               </div>
             </div>
-            <CategoryBreakdownPanel
-              transactions={htxns}
-              bookings={scopedBookings}
-              transactionCategories={transactionCategories}
-              onCategoryClick={openTransactionsByCategory}
-            />
               </>
             )}
           </>
@@ -256,11 +265,11 @@ export default function ReportsPage() {
                       key={k}
                       role="button"
                       tabIndex={0}
-                      onClick={() => openTransactionsByMethod(k)}
+                      onClick={() => openTransactions({ method: k })}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          openTransactionsByMethod(k);
+                          openTransactions({ method: k });
                         }
                       }}
                       className="bg-card rounded-xl p-4 border border-border text-left w-full hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer"
@@ -279,7 +288,7 @@ export default function ReportsPage() {
                         )}
                       </div>
                       <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-1">{cfg.label}</div>
-                      <div className="text-[22px] font-black leading-none" style={{ color: bal < 0 ? "#DC2626" : cfg.color }}>{money(Math.max(0, bal))}</div>
+                      <div className="text-[22px] font-black leading-none" style={{ color: bal < 0 ? "#DC2626" : cfg.color }}>{money(bal)}</div>
                       <div className="text-[10px] text-muted-foreground mt-2">Нажмите для транзакций</div>
                     </div>
                   );
@@ -344,9 +353,7 @@ export default function ReportsPage() {
             canManageSettings={canManageSettings}
             canCancelTransactions={canWriteHotelOps}
             onRefresh={refresh}
-            presetMethod={txPresetMethod}
-            presetCategory={txPresetCategory}
-            presetDirection={txPresetDirection}
+            preset={txPreset}
           />
         )}
 

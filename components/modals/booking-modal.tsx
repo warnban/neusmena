@@ -178,7 +178,7 @@ export function BookingModal({
   const canCancelBooking =
     live.status !== "checkedin" && live.status !== "checkedout" && live.status !== "cancelled";
   const canUndoCheckout = live.status === "checkedout" && Boolean(live.guestId);
-  const canChangeStatus = live.status !== "checkedin";
+  const canChangeStatus = live.status !== "checkedin" && live.status !== "checkedout";
 
   return (
     <>
@@ -261,7 +261,7 @@ export function BookingModal({
                       value={live.status}
                       disabled={busy}
                       onChange={(v) => call(`/api/bookings/${live.id}/status`, { status: v as BookingStatus })}
-                      options={Object.entries(BOOKING_ST).filter(([k]) => k !== "checkedin").map(([k, v]) => ({ value: k, label: v.label }))}
+                      options={Object.entries(BOOKING_ST).filter(([k]) => k !== "checkedin" && k !== "checkedout").map(([k, v]) => ({ value: k, label: v.label }))}
                     />
                   </div>
                 ) : (

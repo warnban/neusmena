@@ -142,6 +142,7 @@ export interface Booking {
   earlyCheckInFee?: number;
   lateCheckOutFee?: number;
   notes: string;
+  checkedInAt?: Date | string | null;
   checkedOutAt?: Date | string | null;
 }
 

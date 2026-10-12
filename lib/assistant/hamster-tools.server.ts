@@ -11,7 +11,7 @@ import {
   listTodayDepartures,
   whoInRoom,
 } from "@/lib/assistant/queries.server";
-import { runAssistantTool } from "@/lib/assistant/tools.server";
+import { assistantToolHotelError, runAssistantTool } from "@/lib/assistant/tools.server";
 import type { PendingAction } from "@/lib/assistant/types";
 import type { SessionPayload } from "@/lib/auth";
 import { findAvailableRooms } from "@/lib/booking-availability.server";
@@ -582,6 +582,8 @@ export async function runHamsterTool(
 }> {
   const extraNames = new Set(HAMSTER_EXTRA_TOOLS.map((t) => t.function.name));
   if (extraNames.has(name)) {
+    const hotelError = await assistantToolHotelError(session, args);
+    if (hotelError) return { result: { error: hotelError } };
     return runHamsterExtraTool(session, name, args);
   }
   const base = await runAssistantTool(session, name, args);

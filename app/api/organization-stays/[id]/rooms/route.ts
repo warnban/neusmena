@@ -3,8 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertHotelWrite } from "@/lib/permissions";
 import { apiErrorMessage } from "@/lib/api-error";
+import { PlaceTakenError } from "@/lib/booking-availability.server";
 import {
   assertRoomAvailable,
+  assertRoomAvailableInTx,
   parseStayDate,
   recalcOrganizationStayAmount,
   shouldOccupyRoom,
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const stayRooms = await prisma.$transaction(async (tx) => {
       const created = [];
       for (const bedId of bedIds) {
+        await assertRoomAvailableInTx(tx, room.id, checkIn, checkOut, undefined, bedId);
         const sr = await tx.organizationStayRoom.create({
           data: {
             organizationStayId: stay.id,
@@ -90,6 +93,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     return NextResponse.json({ ok: true, rooms: stayRooms });
   } catch (e) {
+    if (e instanceof PlaceTakenError) {
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
     console.error("[organization-stays rooms POST]", e);
     return NextResponse.json({ error: apiErrorMessage(e, "Не удалось добавить номер") }, { status: 500 });
   }

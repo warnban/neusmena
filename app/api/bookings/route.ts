@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { calcStayAmount } from "@/lib/booking-pricing";
-import { mskNightDiff, mskDateKey } from "@/lib/msk-time";
-import { resolveRoomForBooking } from "@/lib/booking-availability.server";
+import { mskDateKey } from "@/lib/msk-time";
+import { assertPlaceFreeInTx, PlaceTakenError, resolveRoomForBooking } from "@/lib/booking-availability.server";
 import { guessGenderFromName } from "@/lib/dorm";
+import { canWriteHotelOps } from "@/lib/permissions";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.seatId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!canWriteHotelOps(session.role)) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
 
   const body = await req.json();
@@ -57,6 +61,9 @@ export async function POST(req: NextRequest) {
 
   const checkInDate = new Date(checkIn);
   const checkOutDate = new Date(checkOut);
+  if (Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime())) {
+    return NextResponse.json({ error: "Некорректная дата заезда или выезда" }, { status: 400 });
+  }
   if (checkOutDate <= checkInDate) {
     return NextResponse.json({ error: "Дата выезда должна быть позже заезда" }, { status: 400 });
   }
@@ -94,17 +101,28 @@ export async function POST(req: NextRequest) {
   }
   bedId = resolved.bedId;
 
-  const nights = Math.max(1, mskNightDiff(checkInDate, checkOutDate));
-  const amount = amountIn
+  const hasAmount = amountIn !== undefined && amountIn !== null && amountIn !== "";
+  const amount = hasAmount
     ? Math.round(Number(amountIn))
     : calcStayAmount({ roomPrice: room.price, checkIn: checkInDate, checkOut: checkOutDate });
+  if (!Number.isFinite(amount) || amount < 0) {
+    return NextResponse.json({ error: "Некорректная сумма брони" }, { status: 400 });
+  }
 
   const sourceKey = String(source ?? "direct");
   const channel = sourceKey !== "direct"
     ? await prisma.channel.findFirst({ where: { hotelId, code: sourceKey } })
     : null;
 
-  const { booking, guest } = await prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
+    await assertPlaceFreeInTx(tx, {
+      hotelId,
+      roomId,
+      bedId,
+      checkIn: checkInKey,
+      checkOut: checkOutKey,
+    });
+
     let guest;
     if (existingGuest) {
       guest = await tx.guest.update({
@@ -157,7 +175,15 @@ export async function POST(req: NextRequest) {
       },
     });
     return { booking, guest };
+  }).catch((e) => {
+    if (e instanceof PlaceTakenError) return null;
+    throw e;
   });
+
+  if (!created) {
+    return NextResponse.json({ error: new PlaceTakenError().message }, { status: 409 });
+  }
+  const { booking, guest } = created;
 
   return NextResponse.json({ ok: true, booking, guest });
 }

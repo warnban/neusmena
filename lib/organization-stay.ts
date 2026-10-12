@@ -1,6 +1,8 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mskNightDiff } from "@/lib/msk-time";
 import { startOfDay } from "@/lib/format";
+import { lockRoomPlace, PlaceTakenError } from "@/lib/booking-availability.server";
 
 export function parseStayDate(value: string | Date): Date {
   const d = new Date(value);
@@ -68,9 +70,10 @@ export async function assertRoomAvailable(
   checkIn: Date,
   checkOut: Date,
   excludeStayRoomId?: string,
-  bedId?: string | null
+  bedId?: string | null,
+  db: Prisma.TransactionClient | typeof prisma = prisma
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const room = await prisma.room.findUnique({
+  const room = await db.room.findUnique({
     where: { id: roomId },
     select: { id: true, number: true, kind: true },
   });
@@ -80,11 +83,11 @@ export async function assertRoomAvailable(
     if (room.kind !== "dorm") {
       return { ok: false, error: "Койко-место можно выбрать только в общей комнате" };
     }
-    const bed = await prisma.bed.findFirst({ where: { id: bedId, roomId }, select: { id: true, label: true } });
+    const bed = await db.bed.findFirst({ where: { id: bedId, roomId }, select: { id: true, label: true } });
     if (!bed) return { ok: false, error: "Койко-место не найдено в этой комнате" };
   }
 
-  const bookings = await prisma.booking.findMany({
+  const bookings = await db.booking.findMany({
     where: {
       roomId,
       status: { in: ["new", "confirmed", "checkedin"] },
@@ -99,7 +102,7 @@ export async function assertRoomAvailable(
     return { ok: false, error: `Место занято бронированием: ${b.guestName}` };
   }
 
-  const orgRooms = await prisma.organizationStayRoom.findMany({
+  const orgRooms = await db.organizationStayRoom.findMany({
     where: {
       roomId,
       status: "active",
@@ -122,6 +125,20 @@ export async function assertRoomAvailable(
   }
 
   return { ok: true };
+}
+
+/** Внутри $transaction перед записью размещения: блокирует номер и перепроверяет занятость. */
+export async function assertRoomAvailableInTx(
+  tx: Prisma.TransactionClient,
+  roomId: string,
+  checkIn: Date,
+  checkOut: Date,
+  excludeStayRoomId?: string,
+  bedId?: string | null
+): Promise<void> {
+  await lockRoomPlace(tx, roomId);
+  const avail = await assertRoomAvailable(roomId, checkIn, checkOut, excludeStayRoomId, bedId, tx);
+  if (!avail.ok) throw new PlaceTakenError(avail.error);
 }
 
 export function shouldOccupyRoom(checkIn: Date): boolean {

@@ -4,8 +4,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { bookingStayNights, prepaidNights } from "@/lib/booking-payment-due";
 import { contractAfterReopeningNights, unpaidNightTariff } from "@/lib/stay-contract";
+import { isReportDayClosed } from "@/lib/transaction-manual.server";
+import { mskDateKey } from "@/lib/msk-time";
 
 const ACCOMMODATION = "accommodation";
+const ALREADY_CANCELLED = "TX_ALREADY_CANCELLED";
 
 export async function cancelTransaction(
   transactionId: string,
@@ -22,6 +25,9 @@ export async function cancelTransaction(
 
   if (!tx) return { ok: false, error: "Транзакция не найдена" };
   if (tx.cancelledAt) return { ok: false, error: "Транзакция уже отменена" };
+  if (await isReportDayClosed(tx.hotelId, mskDateKey(tx.date))) {
+    return { ok: false, error: "Сутки закрыты отчётом — сначала разблокируйте отчёт за этот день" };
+  }
 
   const [booking, refundRecord, salaryEntry] = await Promise.all([
     tx.bookingId
@@ -33,6 +39,13 @@ export async function cancelTransaction(
 
   try {
     await prisma.$transaction(async (db) => {
+      const [current] = await db.$queryRaw<{ cancelledAt: Date | null }[]>`
+        SELECT "cancelledAt" FROM "Transaction" WHERE id = ${tx.id} FOR UPDATE`;
+      if (!current || current.cancelledAt) throw new Error(ALREADY_CANCELLED);
+      if (tx.bookingId) {
+        await db.$queryRaw`SELECT id FROM "Booking" WHERE id = ${tx.bookingId} FOR UPDATE`;
+      }
+
       if (tx.type === "payment" && tx.category === ACCOMMODATION && tx.bookingId && booking) {
         const stay = await db.booking.findUnique({
           where: { id: tx.bookingId },
@@ -78,7 +91,7 @@ export async function cancelTransaction(
         await db.booking.update({
           where: { id: tx.bookingId },
           data: {
-            paid: Math.max(0, booking.paid - tx.amount),
+            paid: Math.max(0, (stay ?? booking).paid - tx.amount),
             amount: nextAmount,
           },
         });
@@ -110,7 +123,7 @@ export async function cancelTransaction(
         await db.booking.update({
           where: { id: tx.bookingId },
           data: {
-            paid: Math.min(restoredAmount, booking.paid + tx.amount),
+            paid: Math.min(restoredAmount, (stay ?? booking).paid + tx.amount),
             amount: restoredAmount,
           },
         });
@@ -161,6 +174,9 @@ export async function cancelTransaction(
       });
     });
   } catch (e) {
+    if (e instanceof Error && e.message === ALREADY_CANCELLED) {
+      return { ok: false, error: "Транзакция уже отменена" };
+    }
     console.error("[cancelTransaction]", e);
     if (e instanceof Prisma.PrismaClientValidationError) {
       const msg = e.message;

@@ -3,7 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { SessionPayload } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
-import { hasBookingDateOverlap } from "@/lib/booking-availability.server";
+import { assertPlaceFreeInTx, hasBookingDateOverlap, PlaceTakenError } from "@/lib/booking-availability.server";
 import { guestGenderMatchesDorm, setBedStatus } from "@/lib/dorm.server";
 import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel } from "@/lib/housekeeping";
 import { relocationPricing } from "@/lib/booking-relocation";
@@ -131,7 +131,8 @@ export async function relocateBooking(
     `${todayKey.split("-").reverse().join(".")} ${staying ? "Переселение" : "Смена места"}: ${fromRoom} → ${toRoom}${priceNote}` +
     (reason ? `. Причина: ${reason}` : "");
 
-  await prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
+    await assertPlaceFreeInTx(tx, { ...overlapBase, roomId: newRoomId, bedId: targetBedId });
     await tx.booking.update({
       where: { id: booking.id },
       data: {
@@ -159,7 +160,12 @@ export async function relocateBooking(
         },
       });
     }
+    return true;
+  }).catch((e) => {
+    if (e instanceof PlaceTakenError) return false;
+    throw e;
   });
+  if (!saved) return fail(new PlaceTakenError().message, 409);
 
   if (staying) {
     if (oldBedId) await setBedStatus(oldBedId, "cleaning");

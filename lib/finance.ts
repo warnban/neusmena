@@ -70,8 +70,8 @@ export function transactionInReportMonth(
   month: number
 ): boolean {
   if (!isTransactionRecognized(t, bookings)) return false;
-  const d = transactionReportDate(t, bookings);
-  return d.getFullYear() === year && d.getMonth() === month;
+  const key = mskDateKey(transactionReportDate(t, bookings));
+  return key.slice(0, 7) === `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
 export function isExpenseType(type: Transaction["type"]): boolean {

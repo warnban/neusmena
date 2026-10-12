@@ -3,8 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { assertHotelWrite } from "@/lib/permissions";
 import { apiErrorMessage } from "@/lib/api-error";
+import { PlaceTakenError } from "@/lib/booking-availability.server";
 import {
   assertRoomAvailable,
+  assertRoomAvailableInTx,
   parseStayDate,
   recalcOrganizationStayAmount,
   shouldOccupyRoom,
@@ -93,6 +95,7 @@ export async function POST(req: NextRequest) {
           if (!bed) throw new Error("Койко-место не найдено");
         }
 
+        await assertRoomAvailableInTx(tx, room.id, riIn, riOut, undefined, bedId);
         await tx.organizationStayRoom.create({
           data: {
             organizationStayId: created.id,
@@ -127,6 +130,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, stay: full });
   } catch (e) {
+    if (e instanceof PlaceTakenError) {
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    }
     console.error("[organization-stays POST]", e);
     return NextResponse.json({ error: apiErrorMessage(e, "Не удалось создать проживание") }, { status: 500 });
   }

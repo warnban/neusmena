@@ -1,4 +1,5 @@
-import type { Bed, Booking, Room, Transaction } from "@/lib/types";
+import type { Bed, Booking, Guest, Room, Transaction } from "@/lib/types";
+import { formatDormPlaceLabel } from "@/lib/dorm";
 import type { PaymentMethodDef } from "@/lib/payment-methods";
 import { money, fmtDateRu } from "@/lib/format";
 import { liveOccupancySnapshot, sellableUnits } from "@/lib/occupancy-capacity";
@@ -26,6 +27,63 @@ export type DailyExpenseLine = {
   amount: number;
   label: string;
 };
+
+export type DailyGuestMoveLine = {
+  place: string;
+  name: string;
+};
+
+export type DailyForeignerMoves = {
+  arrivals: DailyGuestMoveLine[];
+  departures: DailyGuestMoveLine[];
+};
+
+/**
+ * Заезды — иностранцы, заселённые в этот день по МСК (для старых броней без отметки времени — по дате заезда).
+ * Выезды — иностранцы, которых в этот день отметили выехавшими.
+ */
+export function foreignerMovesForDay(
+  bookings: Booking[],
+  guests: Pick<Guest, "id" | "name" | "lastName" | "firstName" | "middleName" | "isForeigner">[],
+  rooms: Pick<Room, "id" | "number">[],
+  beds: Pick<Bed, "id" | "label">[],
+  hotelId: string,
+  dateKey: string
+): DailyForeignerMoves {
+  const guestById = new Map(guests.map((g) => [g.id, g]));
+  const roomById = new Map(rooms.map((r) => [r.id, r]));
+  const bedById = new Map(beds.map((b) => [b.id, b]));
+
+  const line = (b: Booking): DailyGuestMoveLine => {
+    const guest = b.guestId ? guestById.get(b.guestId) : undefined;
+    const fio = guest ? [guest.lastName, guest.firstName, guest.middleName].filter(Boolean).join(" ") : "";
+    const roomNumber = roomById.get(b.roomId)?.number ?? "";
+    const bedLabel = b.bedId ? bedById.get(b.bedId)?.label ?? "" : "";
+    return {
+      place: bedLabel ? formatDormPlaceLabel(roomNumber, bedLabel) : roomNumber,
+      name: fio || guest?.name || b.guestName,
+    };
+  };
+  const byPlace = (a: DailyGuestMoveLine, b: DailyGuestMoveLine) =>
+    a.place.localeCompare(b.place, "ru", { numeric: true });
+
+  const foreign = bookings.filter(
+    (b) => b.hotelId === hotelId && b.guestId && guestById.get(b.guestId)?.isForeigner
+  );
+  const arrivals = foreign
+    .filter(
+      (b) =>
+        (b.status === "checkedin" || b.status === "checkedout") &&
+        mskDateKey(new Date(b.checkedInAt ?? b.checkIn)) === dateKey
+    )
+    .map(line)
+    .sort(byPlace);
+  const departures = foreign
+    .filter((b) => b.status === "checkedout" && b.checkedOutAt && mskDateKey(new Date(b.checkedOutAt)) === dateKey)
+    .map(line)
+    .sort(byPlace);
+  return { arrivals, departures };
+}
 
 export type DailyReportData = {
   occupancy: number;
@@ -226,6 +284,7 @@ export function formatDailyReportText(
     encashmentTotal?: number;
     expenseOnlyTotal?: number;
     expenseLines?: DailyExpenseLine[];
+    foreigners?: DailyForeignerMoves;
   },
   paymentLabels: Record<string, string>,
   closedAt?: string
@@ -266,6 +325,14 @@ export function formatDailyReportText(
     lines.push(detail);
   }
   lines.push("", `Итого денег в кассе: ${money(report.cashClosing)}`);
+  if (report.foreigners) {
+    const section = (title: string, rows: DailyGuestMoveLine[]) => {
+      lines.push("", rows.length ? `${title}:` : `${title}: нет`);
+      for (const row of rows) lines.push(`${row.place} — ${row.name}`);
+    };
+    section("Заезды иностранцев", report.foreigners.arrivals);
+    section("Выезды иностранцев", report.foreigners.departures);
+  }
   return lines.join("\n");
 }
 

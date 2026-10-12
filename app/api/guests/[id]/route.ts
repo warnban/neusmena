@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { assertCanManage } from "@/lib/permissions";
+import { assertCanManage, assertSeatOps } from "@/lib/permissions";
 import { guestUpdatePayload, formDisplayName } from "@/lib/guest-form";
 import { apiErrorMessage } from "@/lib/api-error";
 import { deleteStoredFile } from "@/lib/object-storage.server";
@@ -13,12 +13,11 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   const session = await getSession();
-  if (!session?.seatId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const access = await assertSeatOps(session);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const guest = await prisma.guest.findFirst({
-    where: { id: params.id, seatId: session.seatId },
+    where: { id: params.id, seatId: access.session.seatId },
   });
   if (!guest) return NextResponse.json({ error: "Гость не найден" }, { status: 404 });
 
@@ -87,7 +86,7 @@ export async function PATCH(
         where: {
           guestId: guest.id,
           id: bookingId,
-          hotel: { seatId: session.seatId },
+          hotel: { seatId: access.session.seatId },
           status: { in: ["new", "confirmed", "checkedin"] },
         },
         data: { guestName: resolvedGuestName },

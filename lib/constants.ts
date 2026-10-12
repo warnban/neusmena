@@ -84,6 +84,7 @@ export const NAV_ITEMS = [
     { id: "dashboard", href: "/dashboard", icon: "LayoutDashboard", label: "Dashboard" },
     // Шахматка временно скрыта
     { id: "bookings", href: "/bookings", icon: "BookOpen", label: "Бронирования" },
+    { id: "instructions", href: "/instructions", icon: "BookMarked", label: "Инструкции" },
   ]},
   { group: "ОПЕРАЦИИ", items: [
     { id: "tasks", href: "/tasks", icon: "ListChecks", label: "Задачи" },

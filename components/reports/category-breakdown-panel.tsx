@@ -12,29 +12,9 @@ import {
 } from "@/lib/finance";
 import { txCategoryLabel } from "@/lib/tx-categories";
 import type { Booking, Transaction, TransactionCategoryDef } from "@/lib/types";
-import { categoryLabel } from "@/lib/transaction-categories";
+import { currentMonthKey, monthLabel, type MonthKey } from "@/lib/month-comparison";
 
 type Direction = "income" | "expense";
-
-const TX_BUILTIN = new Set([
-  "accommodation",
-  "breakfast",
-  "laundry",
-  "slippers",
-  "minibar",
-  "parking",
-  "transfer_srv",
-  "sauna",
-  "extra",
-  "encashment",
-  "salary",
-  "bonus",
-]);
-
-function categoryDisplayLabel(code: string, custom: TransactionCategoryDef[]): string {
-  if (TX_BUILTIN.has(code)) return txCategoryLabel(code);
-  return categoryLabel(code, custom);
-}
 
 function aggregateByCategory(
   transactions: Transaction[],
@@ -63,7 +43,7 @@ function aggregateByCategory(
   return Array.from(map.entries())
     .map(([code, amount]) => ({
       code,
-      label: categoryDisplayLabel(code, customCategories),
+      label: txCategoryLabel(code, customCategories),
       amount,
     }))
     .sort((a, b) => b.amount - a.amount);
@@ -78,12 +58,11 @@ export function CategoryBreakdownPanel({
   transactions: Transaction[];
   bookings: Booking[];
   transactionCategories: TransactionCategoryDef[];
-  onCategoryClick: (direction: Direction, category: string) => void;
+  onCategoryClick: (direction: Direction, category: string, month: MonthKey) => void;
 }) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const monthLabel = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+  const current = currentMonthKey();
+  const { year, month } = current;
+  const label = monthLabel(current);
 
   const [direction, setDirection] = useState<Direction>("income");
 
@@ -99,13 +78,13 @@ export function CategoryBreakdownPanel({
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h3 className="text-[13px] font-bold text-foreground">Детализация по категориям</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">{monthLabel}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">{label}</p>
         </div>
         <div className="flex gap-2">
           {([
             ["income", "Доход"],
             ["expense", "Расход"],
-          ] as const).map(([id, label]) => (
+          ] as const).map(([id, text]) => (
             <button
               key={id}
               type="button"
@@ -132,7 +111,7 @@ export function CategoryBreakdownPanel({
                     : undefined,
               }}
             >
-              {label}
+              {text}
             </button>
           ))}
         </div>
@@ -150,7 +129,7 @@ export function CategoryBreakdownPanel({
               <button
                 key={row.code}
                 type="button"
-                onClick={() => onCategoryClick(direction, row.code)}
+                onClick={() => onCategoryClick(direction, row.code, current)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/60 transition-colors text-left group"
               >
                 <div className="flex-1 min-w-0">

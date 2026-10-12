@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { setBedStatus } from "@/lib/dorm.server";
 import { apiErrorMessage } from "@/lib/api-error";
-import { hasBookingDateOverlap } from "@/lib/booking-availability.server";
+import { assertPlaceFreeInTx, hasBookingDateOverlap, PlaceTakenError } from "@/lib/booking-availability.server";
 import { mskDateKey } from "@/lib/msk-time";
 
 /** Отмена выселения: возврат гостя в статус «Заселён». */
@@ -57,18 +57,40 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       );
     }
 
-    await prisma.$transaction([
-      prisma.booking.update({
-        where: { id: booking.id },
+    const restored = await prisma.$transaction(async (tx) => {
+      await assertPlaceFreeInTx(tx, {
+        hotelId: booking.hotelId,
+        roomId: booking.roomId,
+        bedId: booking.bedId,
+        checkIn: mskDateKey(booking.checkIn),
+        checkOut: mskDateKey(booking.checkOut),
+        excludeBookingId: booking.id,
+      });
+      const reopened = await tx.booking.updateMany({
+        where: { id: booking.id, status: "checkedout" },
         data: { status: "checkedin", checkedOutAt: null },
-      }),
-      ...(booking.bedId
-        ? []
-        : [prisma.room.update({ where: { id: booking.roomId }, data: { status: "occupied" } })]),
-      ...(openCheckoutTask
-        ? [prisma.hkTask.delete({ where: { id: openCheckoutTask.id } })]
-        : []),
-    ]);
+      });
+      if (reopened.count !== 1) return false;
+      if (!booking.bedId) {
+        await tx.room.update({ where: { id: booking.roomId }, data: { status: "occupied" } });
+      }
+      if (openCheckoutTask) {
+        await tx.hkTask.deleteMany({ where: { id: openCheckoutTask.id } });
+      }
+      return true;
+    }).catch((e) => {
+      if (e instanceof PlaceTakenError) return null;
+      throw e;
+    });
+    if (restored === null) {
+      return NextResponse.json(
+        { error: "Номер уже занят другой бронью — отменить выселение нельзя" },
+        { status: 409 }
+      );
+    }
+    if (!restored) {
+      return NextResponse.json({ error: "Выселение уже отменено" }, { status: 409 });
+    }
 
     if (booking.bedId) {
       await setBedStatus(booking.bedId, "occupied");

@@ -20,6 +20,7 @@ import { hotelHasDiscountRules, calcPaymentWithRule, calcNightPaymentTotal } fro
 import { searchFaqChunks } from "@/lib/assistant/faq.server";
 import type { PendingAction } from "@/lib/assistant/types";
 import type { SessionPayload } from "@/lib/auth";
+import { assertHotelWrite } from "@/lib/permissions";
 
 export const ASSISTANT_TOOLS = [
   {
@@ -259,7 +260,19 @@ async function assertBookingAccess(session: SessionPayload, bookingId: string) {
   if (!booking || booking.hotel.seatId !== session.seatId) {
     return { ok: false as const, error: "Бронь не найдена" };
   }
+  const hotelAccess = await assertHotelWrite(session, booking.hotelId);
+  if (!hotelAccess.ok) return { ok: false as const, error: hotelAccess.error };
   return { ok: true as const, booking };
+}
+
+/** hotelId в аргументах приходит от модели — проверяем, что отель доступен пользователю. */
+export async function assistantToolHotelError(
+  session: SessionPayload,
+  args: Record<string, unknown>
+): Promise<string | null> {
+  if (args.hotelId == null || args.hotelId === "") return null;
+  const auth = await assertHotelWrite(session, String(args.hotelId));
+  return auth.ok ? null : auth.error;
 }
 
 export async function runAssistantTool(
@@ -267,6 +280,9 @@ export async function runAssistantTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<{ result: unknown; pendingAction?: PendingAction }> {
+  const hotelError = await assistantToolHotelError(session, args);
+  if (hotelError) return { result: { error: hotelError } };
+
   switch (name) {
     case "search_faq": {
       const r = await searchFaqChunks(session.seatId!, String(args.query ?? ""));

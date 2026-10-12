@@ -53,12 +53,8 @@ export const GUEST_MANUAL_PRINT_FORM_IDS: GuestFormId[] = (
   Object.keys(GUEST_FORM_TEMPLATES) as GuestFormId[]
 ).filter((id) => id !== STAY_AMENDMENT_FORM_ID);
 
-/** Бланки для печати при заселении (порядок важен) */
-export const CHECK_IN_PRINT_FORM_IDS: GuestFormId[] = [
-  "pd-consent",
-  "hotel-rules",
-  "hotel-contract",
-];
+/** Бланки для печати при заселении; остальные печатаются из карточки гостя. */
+export const CHECK_IN_PRINT_FORM_IDS: GuestFormId[] = ["hotel-rules"];
 
 export function buildGuestFormsPrintUrl(params: {
   guestId: string;

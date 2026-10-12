@@ -5,12 +5,11 @@ import { assertBookingWrite } from "@/lib/booking-auth.server";
 import { assertHotelWrite } from "@/lib/permissions";
 import { assertPaymentsOpen } from "@/lib/payment-lock";
 import { placeHasCheckedInGuest, setBedStatus } from "@/lib/dorm.server";
-import { HK_CATEGORY_TYPES, hkTimeNow, formatHkPlaceLabel } from "@/lib/housekeeping";
 import {
   assertPaymentOperationAllowed,
   resolveTransactionDateInput,
 } from "@/lib/transaction-date.server";
-import { performCheckIn, type PerformCheckInInput } from "@/lib/checkin.server";
+import { performCheckIn, performCheckout, type PerformCheckInInput } from "@/lib/checkin.server";
 import { relocateBooking } from "@/lib/booking-relocate.server";
 import type { GuestFormData } from "@/lib/guest-form";
 import type { SessionPayload } from "@/lib/auth";
@@ -20,47 +19,9 @@ export async function executeCheckout(
   session: SessionPayload,
   payload: Record<string, unknown>
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
-  const bookingId = String(payload.bookingId ?? "");
-  const auth = await assertBookingWrite(session, bookingId);
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  const booking = auth.booking;
-  const bed = booking.bedId ? await prisma.bed.findUnique({ where: { id: booking.bedId } }) : null;
-  const roomNumber = bed ? formatHkPlaceLabel(booking.room.number, bed.label) : booking.room.number;
-  const now = new Date();
-  const time = hkTimeNow();
-
-  await prisma.$transaction([
-    prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: "checkedout", checkedOutAt: now },
-    }),
-    ...(booking.bedId
-      ? []
-      : [prisma.room.update({ where: { id: booking.roomId }, data: { status: "cleaning" } })]),
-    prisma.hkTask.create({
-      data: {
-        hotelId: booking.hotelId,
-        roomId: booking.roomId,
-        bedId: booking.bedId,
-        bookingId: booking.id,
-        roomNumber,
-        type: HK_CATEGORY_TYPES.checkout,
-        category: "checkout",
-        assignee: "—",
-        priority: "high",
-        status: "pending",
-        time,
-        est: "60 мин",
-      },
-    }),
-  ]);
-
-  if (booking.bedId) {
-    await setBedStatus(booking.bedId, "cleaning");
-  }
-
-  return { ok: true, message: `${booking.guestName} выписан из №${roomNumber}. Уборка поставлена ✨` };
+  const result = await performCheckout(session, String(payload.bookingId ?? ""));
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true, message: `${result.guestName} выписан из №${result.roomNumber}. Уборка поставлена ✨` };
 }
 
 export async function executeRelocate(
